@@ -2,11 +2,16 @@ idf_component_register(
     SRCS
         "main.c"
         "../src/link_check.c"
+        "../src/wifi_link_check.c"
     INCLUDE_DIRS
         "."
         "../inc"
     REQUIRES
         esp_wiz_toe
+        esp_wifi
+        nvs_flash
+        esp_netif
+        esp_event
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE

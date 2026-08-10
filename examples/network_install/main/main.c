@@ -1,17 +1,18 @@
 /*
  * SPDX-License-Identifier: CC0-1.0
  *
- * WIZnet TOE (W5500 / W6300) network install check.
+ * WIZnet TOE (W5500 / W6300) + Wi-Fi network install check.
  *
- * Checks the PHY link/cable status, prints the negotiated speed/duplex of the
- * chip's internal PHY and the IP address to ping -- a first-bring-up cable and
- * network sanity check.
+ * Checks both links and prints what a first bring-up needs to know:
+ *   - Ethernet: PHY link, negotiated speed/duplex, and the IP to ping
+ *   - Wi-Fi STA: association, SSID/channel/RSSI, and the IP to ping
+ * Then it idles. No sockets are opened on either interface.
  *
- * Ethernet only, and deliberately so: this example reads the chip's PHY
- * registers directly, which is below the BSD socket layer the other examples
- * switch between Ethernet and Wi-Fi. Wi-Fi has no equivalent registers, so
- * there is no second interface to start here. Only the file layout and the
- * config split follow the loopback-style examples.
+ * This is where it differs from the socket-based examples: those run ONE engine
+ * over a swappable socket vtable. Here there is nothing to swap -- the Ethernet
+ * check reads the WIZnet chip's PHY registers (below the socket layer) and Wi-Fi
+ * has no such registers, so each side has its own small check. Same question
+ * asked twice: "is this link usable?"
  *
  * Config conventions follow esp_wiz_toe:
  *   - SPI / pins  -> component Kconfig, applied by net_backend_toe.c.
@@ -25,6 +26,7 @@
 #include "wizchip_conf.h"       /* wiz_NetInfo, NETINFO_STATIC */
 
 #include "net_backend.h"
+#include "wifi_backend.h"
 #include "net_config.h"
 #include "link_check.h"
 
@@ -44,6 +46,12 @@ static const wiz_NetInfo g_net_info = {
 
 void app_main(void)
 {
+    /* Ethernet (WIZnet chip) first: it initializes esp_netif + the default event
+     * loop that Wi-Fi then reuses, and applies g_net_info to the chip. */
     wiznet_net_init(&g_net_info);
+    wifi_net_init(WIFI_SSID, WIFI_PASS);
+
+    /* Start both checks as sibling tasks; each waits for its own interface. */
     link_check_start("eth", &g_net_info, wiznet_net_is_up);
+    wifi_link_check_start("wifi", wifi_net_is_up);
 }
