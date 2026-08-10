@@ -1,5 +1,7 @@
 # How to Test UPnP Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and UPnP-enabled router are required for the UPnP example test, download and install from below links.
@@ -137,7 +139,7 @@ UPnP 규칙               프로토콜   외부 포트   내부 IP          내�
 002 wsm_driver_tcp_8001   TCP        8001     192.168.11.7      8000
 ```
 
-Two differences from the Ethernet run are worth expecting. The first M-SEARCH succeeds — the `errno 5` below is a WIZnet-chip behaviour and Wi-Fi goes through LwIP instead. And the DHCP lease can take anywhere from two seconds to three minutes to arrive; five runs on the same AP measured 2.5 s, 29 s, 82 s, 86 s and 181 s. Ethernet is never affected. It is Wi-Fi power save meeting an access point that buffers broadcasts poorly — `esp_wifi_set_ps(WIFI_PS_NONE)` after `wifi_net_init()` brought all five boots to about 2.2 s. `examples/udp_multicast` has the measurements and why the workaround is not applied by default.
+Two differences from the Ethernet run are worth expecting. The first M-SEARCH succeeds — the `errno 5` below is a W6300 behaviour and Wi-Fi goes through LwIP instead. And the DHCP lease can take anywhere from two seconds to three minutes to arrive; five runs on the same AP measured 2.5 s, 29 s, 82 s, 86 s and 181 s. Ethernet is never affected. It is Wi-Fi power save meeting an access point that buffers broadcasts poorly — `esp_wifi_set_ps(WIFI_PS_NONE)` after `wifi_net_init()` brought all five boots to about 2.2 s. `examples/udp_multicast` has the measurements and why the workaround is not applied by default.
 
 ### Differences from the original example
 
@@ -233,11 +235,11 @@ If all five attempts fail with `errno 5` rather than simply going unanswered, re
 E (2050) upnp_tx: M-SEARCH to 239.255.255.250:1900 failed: errno 5
 ```
 
-Expected on the first attempt of a run, and harmless: the retry immediately after it succeeds.
+Expected on the first attempt of a run against a **W6300**, and harmless: the retry immediately after it succeeds. A W5500 does not show it at all — its first M-SEARCH goes out and the router answers within milliseconds.
 
 `sendto()` to `239.255.255.250` needs a destination MAC, and ioLibrary's `sendto()` has no multicast handling — it hands the address to the chip, which tries to resolve it by ARP and gives up after about 1.6 s (that is the gap between the two log lines above). By the second attempt the send goes out and the router answers within milliseconds.
 
-`DISCOVER_ATTEMPTS` in `src/upnp_client.c` exists for this. If a future chip or firmware makes every attempt fail this way, the fix belongs in `upnp_transport_ssdp()` — it would set the group before opening the socket, the way `examples/udp_multicast` does — and `upnp_core.c` would not change.
+`DISCOVER_ATTEMPTS` in `src/upnp_client.c` exists for this. If a chip or firmware makes every attempt fail this way, the fix belongs in `upnp_transport_ssdp()` — it would set the group before opening the socket, the way `examples/udp_multicast` does — and `upnp_core.c` would not change.
 
 ### `AddPortMapping failed (718)`
 

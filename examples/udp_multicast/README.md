@@ -1,5 +1,7 @@
 # How to Test UDP Multicast Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and UDP test tool are required for the UDP Multicast example test, download and install from below links.
@@ -123,6 +125,10 @@ socket(sn, Sn_MR_UDP, port, SF_MULTI_ENABLE);
 ```
 
 Datagrams arriving during the reopen are lost. That is acceptable here: a join happens once at start-up, before any traffic is expected.
+
+There is no `close()` before those register writes, and that is deliberate. ioLibrary's `socket()` closes the socket itself before reopening it, so one is not needed — and calling `close()` from this file would not reach ioLibrary's anyway. The component compiles its own sources with `-Dclose=wiz_close` so that ioLibrary's `close(uint8_t)` stops hijacking newlib's POSIX `close(int)`, and that definition does not extend to the example. A bare `close(sn)` here resolves to POSIX `close()`, which closes file **descriptor** `sn` — 0 being stdin.
+
+That was in this file until a W5500 run found it. On a UART console the stray close of fd 0 passed unnoticed and multicast worked anyway, because `socket()`'s own close was doing the real work. On USB Serial/JTAG, where fds 0-2 are the console, it took the console down mid-join and the example looked like it had hung.
 
 `SF_MULTI_ENABLE` belongs in the **flag** argument, not the protocol argument — `socket()` validates it there, and OR-ing it into the protocol gives `0x82`, which matches no protocol case at all.
 

@@ -1,5 +1,7 @@
 # How to Test TFTP Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and TFTP server are required for the TFTP example test, download and install from the links below.
@@ -119,7 +121,7 @@ I (2234) tftp: [wifi] requesting "tftp_test_file.txt" from 192.168.11.4
 I (2594) tftp: [wifi] "tftp_test_file.txt" received: 1461 bytes in 3 blocks
 ```
 
-The doubled RRQ on Ethernet is the retransmission timer doing its job: the chip resolves the server's MAC by ARP inside `sendto()`, and the first attempt to a cold peer times out. Wi-Fi shows no retry because lwIP queues the packet behind its own ARP request instead of failing the send.
+The doubled RRQ is the retransmission timer doing its job, and it is specific to the W6300: the chip resolves the server's MAC by ARP inside `sendto()`, and the first attempt to a cold peer times out. A W5500 on the same LAN sends the first RRQ straight through, so its Ethernet log shows only one. Wi-Fi never retries on either chip, because lwIP queues the packet behind its own ARP request instead of failing the send.
 
 Note that the Wi-Fi station needs a route to the TFTP server. Here the AP bridges onto the same LAN as the PC, so the board's DHCP address (192.168.11.7) and the server (192.168.11.4) share a subnet. On an isolated AP, point `TFTP_SERVER_IP` at an address the station can actually reach.
 

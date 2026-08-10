@@ -1,5 +1,7 @@
 # How to Test UDP Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and UDP test tool are required for the UDP example test, download and install from below links.
