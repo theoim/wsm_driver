@@ -117,6 +117,17 @@ void wiznet_net_init(const wiz_NetInfo *net_info)
         .sclk_io_num = CONFIG_ESP_WIZ_TOE_PIN_SCLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
+        /* Must be -1, not left zero-initialised. spicommon_bus_initialize_io()
+         * gates its octal (data4..data7) wiring on `flags & SPICOMMON_BUSFLAG_OCTAL`
+         * rather than `(flags & OCTAL) == OCTAL`, and OCTAL is a superset of QUAD,
+         * so the plain quad bus configured below enters that branch too. Left at 0
+         * these read as GPIO0 -- a boot strapping pin -- and routing it to SPI
+         * kills the chip before app_main() gets a log line out. The TOE transport
+         * (esp_wiz_toe_spi.c) already carries this same fix. */
+        .data4_io_num = -1,
+        .data5_io_num = -1,
+        .data6_io_num = -1,
+        .data7_io_num = -1,
     };
 #if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300) && defined(CONFIG_ESP_WIZ_TOE_QSPI_QUAD)
     /* Quad mode needs the two extra data lines declared on the bus. */
