@@ -79,14 +79,14 @@ static void link_check_run(link_ctx_t *c)
 
     if (link_status == PHY_LINK_ON) {
         wiz_PhyConf phyconf;
-        wizphy_getphyconf(&phyconf);
+        wizphy_getphystat(&phyconf);   /* negotiated link, not the advertised config */
 
         ESP_LOGI(TAG, "[%s] Link OK of Internal PHY.", c->name);
         /* Kept exactly as the original WIZnet-PICO-C example prints it, including
          * the inverted-looking ternary (PHY_SPEED_10 -> "100"). Do not "fix" this
          * without checking the original first -- see README. */
         ESP_LOGI(TAG, "[%s] the %d Mbtis speed of Internal PHY.", c->name,
-                 phyconf.speed == PHY_SPEED_10 ? 100 : 10);
+                 phyconf.speed == PHY_SPEED_100 ? 100 : 10);
         ESP_LOGI(TAG, "[%s] The %s Duplex Mode of the Internal PHY.", c->name,
                  phyconf.duplex == PHY_DUPLEX_FULL ? "Full-Duplex" : "Half-Duplex");
         print_ping_hint(c);
