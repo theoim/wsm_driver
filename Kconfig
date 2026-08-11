@@ -3,7 +3,7 @@ menu "WIZnet TOE Component"
 #
 # Only three things are user-selectable here: the chip, the W6300 QSPI mode,
 # and the per-socket buffer sizes. All SPI wiring (pins / host / clock) is
-# derived from the chip and hidden from menuconfig — see the per-chip blocks
+# derived from the chip and hidden from menuconfig -- see the per-chip blocks
 # at the bottom. Symbol names are the same for both chips (the port/example
 # code reads CONFIG_ESP_WIZ_TOE_PIN_*); only the values differ.
 #
@@ -16,25 +16,52 @@ config ESP_WIZ_TOE_ENABLED
 if ESP_WIZ_TOE_ENABLED
 
 # =============================================================================
-# Chip selection
+# Board selection -- the only hardware choice a user makes
 # =============================================================================
-choice ESP_WIZ_TOE_CHIP
-    prompt "WIZnet chip"
-    default ESP_WIZ_TOE_CHIP_W5500
+# Chip and pins are both derived from the board. Picking the chip alone cannot
+# express the wiring, because the W6300 Dev-kit and the W6300 SoM carry the same
+# chip on different GPIOs.
+choice ESP_WIZ_TOE_BOARD
+    prompt "Board"
+    default ESP_WIZ_TOE_BOARD_W5500_DEVKIT
 
-config ESP_WIZ_TOE_CHIP_W5500
-    bool "W5500"
+config ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    bool "ESP32-W5500-Dev-kit"
 
-config ESP_WIZ_TOE_CHIP_W6300
-    bool "W6300"
+config ESP_WIZ_TOE_BOARD_W5500_SOM
+    bool "ESP32-W5500-SoM(NEED VERIFY)"
+
+config ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    bool "ESP32-W6300-Dev-kit"
+
+config ESP_WIZ_TOE_BOARD_W6300_SOM
+    bool "ESP32-W6300-SoM"
+
+config ESP_WIZ_TOE_BOARD_CUSTOM
+    bool "Custom"
 
 endchoice
+
+# =============================================================================
+# Chip -- derived from the board, editable only on Custom
+# =============================================================================
+# A choice member cannot be the target of `select`, so the chip is a plain bool
+# whose default follows the board rather than something the board selects.
+# The symbol names are unchanged, so no .c source has to know boards exist.
+config ESP_WIZ_TOE_CHIP_W6300
+    bool "W6300" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default y if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default y if ESP_WIZ_TOE_BOARD_W6300_SOM
+
+config ESP_WIZ_TOE_CHIP_W5500
+    bool
+    default y if !ESP_WIZ_TOE_CHIP_W6300
 
 # =============================================================================
 # Network backend selection
 # =============================================================================
 # TOE and ETH each define wiznet_net_init()/wiznet_net_is_up(), so they are
-# mutually exclusive at link time — pick exactly one here.
+# mutually exclusive at link time -- pick exactly one here.
 choice ESP_WIZ_TOE_BACKEND
     prompt "Network backend"
     default ESP_WIZ_TOE_BACKEND_TOE
@@ -111,97 +138,96 @@ config ESP_WIZ_TOE_SOCKET_WRAP
 
         Turn this OFF for apps that call the ioLibrary socket API directly
         (socket(sn, Sn_MR_TCP, ...) / close(sn)), as the non-loopback examples
-        do — the close() rename above would otherwise send their close(sn) to
+        do -- the close() rename above would otherwise send their close(sn) to
         newlib's POSIX close().
 
 # =============================================================================
-# SPI wiring — derived per chip (no prompt -> hidden, follows chip choice).
-# Switching W5500/W6300 updates these automatically. To rewire, edit a value.
+# SPI wiring -- one definition per symbol, defaults selected by board.
 # =============================================================================
+# Each symbol is defined exactly once; only its `default` lines are conditional.
+# Splitting these into per-board `if` blocks would reintroduce the duplicate
+# definitions kconfgen warns about (and plans to raise to an error).
+#
+# The prompt is gated on Custom, so a fixed board shows read-only derived values
+# and only self-designed hardware exposes editable pins. The trailing bare
+# `default` covers Custom and follows the chip, so a custom board starts from the
+# reference wiring for that chip rather than from nothing.
+#
+#            MOSI MISO IO2 IO3 SCLK  CS RST INT
+#   W5500 Dev-kit  11   13   -   -   12  10   9  14
+#   W5500 SoM      11   13   -   -   12  10   9  14
+#   W6300 Dev-kit  11   13  14   9   12  10  21   8
+#   W6300 SoM      34   35  36  37   42  41  21  33
 
-# -------------------- W6300 (QSPI: D0..D3 = MOSI/MISO/IO2/IO3) --------------
-if ESP_WIZ_TOE_CHIP_W6300
-
-config ESP_WIZ_TOE_PIN_MOSI         # D0
-    int
+config ESP_WIZ_TOE_PIN_MOSI         # W6300: D0
+    int "MOSI / D0 GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default 11 if ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    default 11 if ESP_WIZ_TOE_BOARD_W5500_SOM
+    default 11 if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 34 if ESP_WIZ_TOE_BOARD_W6300_SOM
     default 11
 
-config ESP_WIZ_TOE_PIN_MISO         # D1
-    int
+config ESP_WIZ_TOE_PIN_MISO         # W6300: D1
+    int "MISO / D1 GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default 13 if ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    default 13 if ESP_WIZ_TOE_BOARD_W5500_SOM
+    default 13 if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 35 if ESP_WIZ_TOE_BOARD_W6300_SOM
     default 13
 
-config ESP_WIZ_TOE_PIN_IO2          # D2 (Quad only)
-    int
+config ESP_WIZ_TOE_PIN_IO2          # W6300: D2 (Quad only)
+    int "IO2 / D2 GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
     depends on ESP_WIZ_TOE_QSPI_QUAD
-    default 14
+    default 14 if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 36 if ESP_WIZ_TOE_BOARD_W6300_SOM
+    default 36
 
-config ESP_WIZ_TOE_PIN_IO3          # D3 (Quad only)
-    int
+config ESP_WIZ_TOE_PIN_IO3          # W6300: D3 (Quad only)
+    int "IO3 / D3 GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
     depends on ESP_WIZ_TOE_QSPI_QUAD
-    default 9
+    default 9  if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 37 if ESP_WIZ_TOE_BOARD_W6300_SOM
+    default 37
 
 config ESP_WIZ_TOE_PIN_SCLK
-    int
+    int "SCLK GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default 12 if ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    default 12 if ESP_WIZ_TOE_BOARD_W5500_SOM
+    default 12 if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 42 if ESP_WIZ_TOE_BOARD_W6300_SOM
     default 12
 
 config ESP_WIZ_TOE_PIN_CS
-    int
+    int "CS GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default 10 if ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    default 10 if ESP_WIZ_TOE_BOARD_W5500_SOM
+    default 10 if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 41 if ESP_WIZ_TOE_BOARD_W6300_SOM
     default 10
 
 config ESP_WIZ_TOE_PIN_RST
-    int
-    default 21
-
-config ESP_WIZ_TOE_PIN_INT
-    int
-    default 8
-
-config ESP_WIZ_TOE_SPI_HOST
-    int
-    default 2
-
-config ESP_WIZ_TOE_SPI_CLOCK_HZ
-    int
-    default 33000000
-
-endif # W6300
-
-# -------------------- W5500 (standard SPI: MISO/MOSI) -----------------------
-if ESP_WIZ_TOE_CHIP_W5500
-
-config ESP_WIZ_TOE_PIN_MISO
-    int
-    default 13
-
-config ESP_WIZ_TOE_PIN_MOSI
-    int
-    default 11
-
-config ESP_WIZ_TOE_PIN_SCLK
-    int
-    default 12
-
-config ESP_WIZ_TOE_PIN_CS
-    int
-    default 10
-
-config ESP_WIZ_TOE_PIN_RST
-    int
+    int "RST GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default 9  if ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    default 9  if ESP_WIZ_TOE_BOARD_W5500_SOM
+    default 21 if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 21 if ESP_WIZ_TOE_BOARD_W6300_SOM
     default 9
 
 config ESP_WIZ_TOE_PIN_INT
-    int
+    int "INT GPIO" if ESP_WIZ_TOE_BOARD_CUSTOM
+    default 14 if ESP_WIZ_TOE_BOARD_W5500_DEVKIT
+    default 14 if ESP_WIZ_TOE_BOARD_W5500_SOM
+    default 8  if ESP_WIZ_TOE_BOARD_W6300_DEVKIT
+    default 33 if ESP_WIZ_TOE_BOARD_W6300_SOM
     default 14
 
 config ESP_WIZ_TOE_SPI_HOST
-    int
+    int "SPI host" if ESP_WIZ_TOE_BOARD_CUSTOM
     default 2
 
 config ESP_WIZ_TOE_SPI_CLOCK_HZ
-    int
+    int "SPI clock (Hz)" if ESP_WIZ_TOE_BOARD_CUSTOM
     default 33000000
-
-endif # W5500
 
 endif # ESP_WIZ_TOE_ENABLED
 
