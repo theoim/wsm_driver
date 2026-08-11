@@ -96,7 +96,8 @@ void set_pppinfo(uint8_t *nas_mac, uint8_t *ppp_ip, uint16_t nas_sessionid)
 #endif
 	/* Set PPPoE bit in MR(Common Mode Register) : enable PPPoE */
 #if (_WIZCHIP_ == W6100 || _WIZCHIP_ == W6300)
-	setSn_MR(0, getSn_MR(0) | NETMR2_PPPoE);
+	/* NETMR2_PPPoE is a _NETMR2_ bit, not a Sn_MR one (see w6300.h) */
+	setNETMR2(getNETMR2() | NETMR2_PPPoE);
 #else
 	setMR(getMR() | MR_PPPOE);
 

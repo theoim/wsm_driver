@@ -17,12 +17,25 @@
 
 #include "wizchip_conf.h"
 
-/* The vendored PPPoE.c uses W5100S/W5500 PPPoE registers (getMR/getPSID/...),
- * which do not exist on W6300 (it exposes PPPoE through a different register
- * map: PSIDR/PHAR/NETMR2). This example is therefore W5500-only -- pick the
- * chip in sdkconfig.defaults / menuconfig. */
-#if (_WIZCHIP_ != W5500)
-#error "The pppoe example supports W5500 only (W6300 uses a different PPPoE register map)."
+/* The vendored PPPoE.c carries its own W5500 / W6300 branches (MR+PSID+PTIMER
+ * vs NETMR2+PSIDR+PTMR), so both chips are supported. Other WIZnet parts are
+ * not: W5100S needs a different PPPoE.c path and is untested here. */
+#if (_WIZCHIP_ != W5500) && (_WIZCHIP_ != W6300)
+#error "The pppoe example supports W5500 and W6300 only."
+#endif
+
+/* PPPoE is negotiated by driving the chip's own registers through ioLibrary, so
+ * this example only works when the TOE backend owns the chip. Under the ETH
+ * backend esp_eth owns it instead (MACRAW + software LwIP) and never registers
+ * ioLibrary's SPI callbacks, so the first WIZCHIP_READ() falls through to
+ * ioLibrary's default parallel-bus path and writes to address 0 -- a
+ * StoreProhibited panic a couple of seconds after boot. There is no ETH-backend
+ * equivalent to fall back to, so fail here instead of at runtime.
+ * Fix: set CONFIG_ESP_WIZ_TOE_BACKEND_TOE=y (menuconfig -> Component config ->
+ * WIZnet TOE Component -> Network backend), or delete sdkconfig so this
+ * example's sdkconfig.defaults applies. */
+#if !defined(CONFIG_ESP_WIZ_TOE_BACKEND_TOE)
+#error "The pppoe example requires the TOE backend (CONFIG_ESP_WIZ_TOE_BACKEND_TOE)."
 #endif
 
 /* PPPoE.h does `#include "socket.h"`, meaning ioLibrary's Ethernet/socket.h.
