@@ -31,11 +31,11 @@
  * ioLibrary's default parallel-bus path and writes to address 0 -- a
  * StoreProhibited panic a couple of seconds after boot. There is no ETH-backend
  * equivalent to fall back to, so fail here instead of at runtime.
- * Fix: set CONFIG_ESP_WIZ_TOE_BACKEND_TOE=y (menuconfig -> Component config ->
+ * Fix: set CONFIG_WSM_DRIVER_BACKEND_TOE=y (menuconfig -> Component config ->
  * WIZnet TOE Component -> Network backend), or delete sdkconfig so this
  * example's sdkconfig.defaults applies. */
-#if !defined(CONFIG_ESP_WIZ_TOE_BACKEND_TOE)
-#error "The pppoe example requires the TOE backend (CONFIG_ESP_WIZ_TOE_BACKEND_TOE)."
+#if !defined(CONFIG_WSM_DRIVER_BACKEND_TOE)
+#error "The pppoe example requires the TOE backend (CONFIG_WSM_DRIVER_BACKEND_TOE)."
 #endif
 
 /* PPPoE.h does `#include "socket.h"`, meaning ioLibrary's Ethernet/socket.h.

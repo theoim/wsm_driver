@@ -51,7 +51,7 @@ static void print_cable_hint(const link_ctx_t *c)
              c->name);
 }
 
-#if defined(CONFIG_ESP_WIZ_TOE_BACKEND_TOE)
+#if defined(CONFIG_WSM_DRIVER_BACKEND_TOE)
 /* ---- TOE backend: read the chip's PHY registers through ioLibrary ---- */
 static void link_check_run(link_ctx_t *c)
 {
@@ -122,7 +122,7 @@ static void link_check_run(link_ctx_t *c)
         print_cable_hint(c);
     }
 }
-#endif /* CONFIG_ESP_WIZ_TOE_BACKEND_TOE */
+#endif /* CONFIG_WSM_DRIVER_BACKEND_TOE */
 
 static void link_check_task(void *arg)
 {
