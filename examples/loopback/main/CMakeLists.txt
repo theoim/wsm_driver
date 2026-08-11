@@ -7,7 +7,7 @@ idf_component_register(
         "."
         "../inc"
     REQUIRES
-        esp_wiz_toe
+        wsm_driver
         esp_wifi
         nvs_flash
         esp_netif
@@ -15,9 +15,9 @@ idf_component_register(
         lwip
 )
 
-# NOTE: do NOT define ESP_WIZ_TOE_SOCKET_WRAP here. wifi_loopback.c keys off it to
-# bind __real_lwip_* (bypassing the W5500 --wrap), and the esp_wiz_toe component
-# already defines it PUBLIC from CONFIG_ESP_WIZ_TOE_SOCKET_WRAP, so it arrives via
+# NOTE: do NOT define WSM_DRIVER_SOCKET_WRAP here. wifi_loopback.c keys off it to
+# bind __real_lwip_* (bypassing the W5500 --wrap), and the wsm_driver component
+# already defines it PUBLIC from CONFIG_WSM_DRIVER_SOCKET_WRAP, so it arrives via
 # REQUIRES. Hardcoding it breaks the ETH backend, where the wrap is off and
 # __real_lwip_* do not exist.
 

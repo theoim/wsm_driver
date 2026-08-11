@@ -31,7 +31,7 @@
 #include "w6300_eth.h"
 
 /* RSTn assert width and the settling time the chip needs afterwards. Matches
- * what the TOE transport (esp_wiz_toe_spi_reset) uses on this hardware. */
+ * what the TOE transport (wsm_driver_spi_reset) uses on this hardware. */
 #define W6300_HW_RESET_ASSERT_MS (2)
 #define W6300_HW_RESET_SETTLE_MS (150)
 

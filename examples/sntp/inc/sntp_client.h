@@ -4,10 +4,10 @@
  * Backend-neutral SNTP (RFC 4330) client, shared by the Ethernet (WIZnet chip)
  * and Wi-Fi paths. The socket entry points are injected via a vtable so the
  * exact same query logic drives either stack:
- *   - Ethernet: plain lwIP BSD ops (lwip_socket/...). With ESP_WIZ_TOE_SOCKET_WRAP=1
+ *   - Ethernet: plain lwIP BSD ops (lwip_socket/...). With WSM_DRIVER_SOCKET_WRAP=1
  *     these are redirected to the WIZnet hardware sockets by -Wl,--wrap
  *     (wiztoe_wrap.c); with =0 they are the software LwIP over esp_eth.
- *   - Wi-Fi: with ESP_WIZ_TOE_SOCKET_WRAP=1 the __real_lwip_* symbols (bypassing
+ *   - Wi-Fi: with WSM_DRIVER_SOCKET_WRAP=1 the __real_lwip_* symbols (bypassing
  *     --wrap) so the traffic goes to the REAL software LwIP. See wifi_sntp.c.
  *
  * NOTE: this replaces ioLibrary's SNTP_init()/SNTP_run(). That implementation

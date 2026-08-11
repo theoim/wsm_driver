@@ -32,13 +32,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -66,7 +66,7 @@ Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, a
 
 ### Network backend
 
-Under `Component config -> WIZnet TOE Component -> Network backend` there are two
+Under `Component config -> WIZnet WSM Driver -> Network backend` there are two
 choices, and the same `src/netbios.c` runs on either:
 
 | Backend | What carries the traffic | Which symbols the responder calls |
@@ -84,7 +84,7 @@ reaches the real software stack.
 All of the example's settings live in `examples/netbios/inc/net_config.h`.
 
 ```c
-/* ---- static network identity (esp_wiz_toe style: wiz_NetInfo byte arrays) ---- */
+/* ---- static network identity (wsm_driver style: wiz_NetInfo byte arrays) ---- */
 #define NET_MAC_ADDR          {0x00, 0x08, 0xDC, 0x12, 0x34, 0x56}  /* WIZnet OUI */
 #define NET_IP_ADDR           {192, 168, 11, 2}
 #define NET_SUBNET_MASK       {255, 255, 255, 0}
@@ -235,18 +235,18 @@ Both commands depend on NetBIOS over TCP/IP being enabled on the PC's adapter, s
 - **Same subnet required:** NetBIOS name service uses UDP broadcast on port 137, so the PC and the device must be on the same local subnet (`192.168.11.x` here). Name resolution does not cross routers.
 - **`test.py` queries by address, not by broadcast:** it sends the name query straight to the address given with `-U`, so the device IP has to be known up front (it is `NET_IP_ADDR`, `192.168.11.2`, unless you changed it). That is also why it works where `ping <name>` does not — no OS-level NetBIOS resolver is involved. The device answers a unicast query exactly as it answers a broadcast one.
 - **What the reply says:** the responder always answers `UNIQUE` / `B-node` (name flags `0x0000`) with a TTL of `NETBIOS_NAME_TTL` seconds, and echoes back whichever suffix was asked for — so `--suffix 20` resolves to the same address as the default `00`.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/run_socket_open.png
-[link-run_ping]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/run_ping.png
-[link-run_serial]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/run_serial.png
-[link-run_nbtstat]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/netbios/run_nbtstat.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/run_socket_open.png
+[link-run_ping]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/run_ping.png
+[link-run_serial]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/run_serial.png
+[link-run_nbtstat]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/netbios/run_nbtstat.png

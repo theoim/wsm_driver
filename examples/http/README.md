@@ -29,13 +29,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -63,7 +63,7 @@ Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, a
 
 ### Network backend
 
-`Component config -> WIZnet TOE Component -> Network backend` picks which stack carries the traffic. **The example source does not change** — the choice is made by the linker:
+`Component config -> WIZnet WSM Driver -> Network backend` picks which stack carries the traffic. **The example source does not change** — the choice is made by the linker:
 
 | menuconfig choice | What `src/http_server.c`'s `ops->socket()` / `ops->recv()` / `ops->send()` resolve to |
 |-------------------|-------------------------------------------------------------------------------|
@@ -203,17 +203,17 @@ I (xxxxx) http: [eth] GET /favicon.ico
 - **Requests handled:** `GET` and `HEAD` for `/` and `/index.html` (a query string is ignored). Anything else gets `404 Not Found`; other methods get `501 Not Implemented`. Requests whose headers exceed `HTTP_BUF_SIZE` are truncated.
 - **Session timeout:** `SO_RCVTIMEO` (`HTTP_RECV_TIMEOUT_MS`) bounds both `accept()` and `recv()`, so a task that never sees a client — or a client that connects and then goes silent — keeps looping instead of wedging.
 - **1 ms tick:** `sdkconfig.defaults` sets `CONFIG_FREERTOS_HZ=1000`. The TOE poll loops (`wiztoe_accept` / `wiztoe_recv`) yield in 1 ms steps and count those steps for `SO_RCVTIMEO`; at the IDF default of 100 Hz a 1 ms delay truncates to 0 ticks, which busy-waits and starves the idle task.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/run_socket_open.png
-[link-run_browser]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/run_browser.png
-[link-run_webpage]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/http/run_webpage.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/run_socket_open.png
+[link-run_browser]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/run_browser.png
+[link-run_webpage]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/http/run_webpage.png

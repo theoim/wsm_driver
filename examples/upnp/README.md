@@ -1,5 +1,7 @@
 # How to Test UPnP Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and UPnP-enabled router are required for the UPnP example test, download and install from below links.
@@ -30,13 +32,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -90,7 +92,7 @@ The mapping the example asks for lives in the same file.
 #define UPNP_MAP_EXT_PORT     8000
 #define UPNP_MAP_INT_IP       NET_IP_ADDR_STR
 #define UPNP_MAP_INT_PORT     8000
-#define UPNP_MAP_DESCRIPTION  "esp_wiz_toe"
+#define UPNP_MAP_DESCRIPTION  "wsm_driver"
 
 #define UPNP_DELETE_AFTER_ADD 1     /* 0 keeps the mapping for inspection */
 #define UPNP_EVENT_LISTEN_SEC 10    /* 0 skips eventing entirely */
@@ -127,17 +129,17 @@ I (82910) upnp_tx: SSDP reply from 192.168.11.1 (404 bytes)
 I (82911) upnp: [wifi] IGD found at 192.168.11.1:64690
 I (82952) upnp: [wifi] subscribed to eventing
 I (82955) upnp: [wifi] waiting 10s for eventing on port 5002
-I (93018) upnp: [wifi] mapped TCP 8002 -> 192.168.11.7:8000 ("esp_wiz_toe")
+I (93018) upnp: [wifi] mapped TCP 8002 -> 192.168.11.7:8000 ("wsm_driver")
 ```
 
 The router lists it against the Wi-Fi lease, not the static Ethernet address:
 
 ```
 UPnP 규칙               프로토콜   외부 포트   내부 IP          내부 포트
-002 esp_wiz_toe_tcp_8001   TCP        8001     192.168.11.7      8000
+002 wsm_driver_tcp_8001   TCP        8001     192.168.11.7      8000
 ```
 
-Two differences from the Ethernet run are worth expecting. The first M-SEARCH succeeds — the `errno 5` below is a WIZnet-chip behaviour and Wi-Fi goes through LwIP instead. And the DHCP lease can take anywhere from two seconds to three minutes to arrive; five runs on the same AP measured 2.5 s, 29 s, 82 s, 86 s and 181 s. Ethernet is never affected. It is Wi-Fi power save meeting an access point that buffers broadcasts poorly — `esp_wifi_set_ps(WIFI_PS_NONE)` after `wifi_net_init()` brought all five boots to about 2.2 s. `examples/udp_multicast` has the measurements and why the workaround is not applied by default.
+Two differences from the Ethernet run are worth expecting. The first M-SEARCH succeeds — the `errno 5` below is a W6300 behaviour and Wi-Fi goes through LwIP instead. And the DHCP lease can take anywhere from two seconds to three minutes to arrive; five runs on the same AP measured 2.5 s, 29 s, 82 s, 86 s and 181 s. Ethernet is never affected. It is Wi-Fi power save meeting an access point that buffers broadcasts poorly — `esp_wifi_set_ps(WIFI_PS_NONE)` after `wifi_net_init()` brought all five boots to about 2.2 s. `examples/udp_multicast` has the measurements and why the workaround is not applied by default.
 
 ### Differences from the original example
 
@@ -187,7 +189,7 @@ I (2071)  upnp: [eth] controlURL   /ctl/IPConn
 I (2071)  upnp: [eth] eventSubURL  /evt/IPConn
 I (2078)  upnp: [eth] subscribed to eventing
 I (2079)  upnp: [eth] waiting 10s for eventing on port 5002
-I (12107) upnp: [eth] mapped TCP 8000 -> 192.168.11.2:8000 ("esp_wiz_toe")
+I (12107) upnp: [eth] mapped TCP 8000 -> 192.168.11.2:8000 ("wsm_driver")
 I (12107) upnp: [eth] mapping left in place — check the router's admin page
 I (12109) upnp: [eth] session finished
 ```
@@ -204,7 +206,7 @@ Set `UPNP_DELETE_AFTER_ADD` to 0 and rebuild, then open your router's admin page
 
 ```
 UPnP 규칙 (1)          프로토콜   외부 포트   내부 IP          내부 포트
-001 esp_wiz_toe_tcp_8000   TCP        8000     192.168.11.2      8000
+001 wsm_driver_tcp_8000   TCP        8000     192.168.11.2      8000
 ```
 
 The router derived that name from `UPNP_MAP_DESCRIPTION` by appending the protocol and port; some routers show the description verbatim instead.
@@ -233,11 +235,11 @@ If all five attempts fail with `errno 5` rather than simply going unanswered, re
 E (2050) upnp_tx: M-SEARCH to 239.255.255.250:1900 failed: errno 5
 ```
 
-Expected on the first attempt of a run, and harmless: the retry immediately after it succeeds.
+Expected on the first attempt of a run against a **W6300**, and harmless: the retry immediately after it succeeds. A W5500 does not show it at all — its first M-SEARCH goes out and the router answers within milliseconds.
 
 `sendto()` to `239.255.255.250` needs a destination MAC, and ioLibrary's `sendto()` has no multicast handling — it hands the address to the chip, which tries to resolve it by ARP and gives up after about 1.6 s (that is the gap between the two log lines above). By the second attempt the send goes out and the router answers within milliseconds.
 
-`DISCOVER_ATTEMPTS` in `src/upnp_client.c` exists for this. If a future chip or firmware makes every attempt fail this way, the fix belongs in `upnp_transport_ssdp()` — it would set the group before opening the socket, the way `examples/udp_multicast` does — and `upnp_core.c` would not change.
+`DISCOVER_ATTEMPTS` in `src/upnp_client.c` exists for this. If a chip or firmware makes every attempt fail this way, the fix belongs in `upnp_transport_ssdp()` — it would set the group before opening the socket, the way `examples/udp_multicast` does — and `upnp_core.c` would not change.
 
 ### `AddPortMapping failed (718)`
 
@@ -267,16 +269,16 @@ Eventing is optional and the run continues without it. Some routers accept the S
 ## Appendix
 
 - **Echo-testing the mapped port:** the original's menu could start a TCP or UDP loopback on the port it had just mapped. That belongs to `examples/loopback`, which does the same thing on both interfaces — run it after this example with `UPNP_DELETE_AFTER_ADD` set to 0.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/build_log.png
-[link-run_discovery]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/run_discovery.png
-[link-run_router]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/upnp/run_router.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/build_log.png
+[link-run_discovery]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/run_discovery.png
+[link-run_router]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/upnp/run_router.png

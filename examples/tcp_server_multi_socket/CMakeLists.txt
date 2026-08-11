@@ -3,4 +3,4 @@ cmake_minimum_required(VERSION 3.16)
 set(EXTRA_COMPONENT_DIRS "../../")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(esp_wiz_toe_tcp_server_multi_socket_example)
+project(wsm_driver_tcp_server_multi_socket_example)

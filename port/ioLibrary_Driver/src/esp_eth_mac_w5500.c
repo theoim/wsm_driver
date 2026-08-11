@@ -18,7 +18,6 @@
 #include "esp_check.h"
 #include "esp_timer.h"
 #include "esp_system.h"
-#include "esp_idf_version.h"
 #include "esp_intr_alloc.h"
 #include "esp_heap_caps.h"
 #include "esp_cpu.h"
@@ -445,9 +444,7 @@ err:
 }
 
 /* MAC-filter / all-multicast callbacks were added to esp_eth_mac_t in ESP-IDF
- * 5.5; guard the implementations (and their helper) so the driver still builds
- * on the component's declared minimum (>= 5.4.0). */
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+ * 5.5. The component requires >= 6.0, so they are unconditionally present. */
 static esp_err_t emac_w5500_set_block_ip4_mcast(esp_eth_mac_t *mac, bool block)
 {
     esp_err_t ret = ESP_OK;
@@ -501,7 +498,6 @@ static esp_err_t emac_w5500_del_mac_filter(esp_eth_mac_t *mac, uint8_t *addr)
 err:
     return ret;
 }
-#endif /* ESP_IDF_VERSION >= 5.5.0 */
 
 static esp_err_t emac_w5500_set_link(esp_eth_mac_t *mac, eth_link_t link)
 {
@@ -591,7 +587,6 @@ err:
     return ret;
 }
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 static esp_err_t emac_w5500_set_all_multicast(esp_eth_mac_t *mac, bool enable)
 {
     emac_w5500_t *emac = __containerof(mac, emac_w5500_t, parent);
@@ -604,7 +599,6 @@ static esp_err_t emac_w5500_set_all_multicast(esp_eth_mac_t *mac, bool enable)
     }
     return ESP_OK;
 }
-#endif /* ESP_IDF_VERSION >= 5.5.0 */
 
 static esp_err_t emac_w5500_enable_flow_ctrl(esp_eth_mac_t *mac, bool enable)
 {
@@ -953,17 +947,13 @@ esp_eth_mac_t *esp_eth_mac_new_w5500(const eth_w5500_config_t *w5500_config, con
     emac->parent.read_phy_reg = emac_w5500_read_phy_reg;
     emac->parent.set_addr = emac_w5500_set_addr;
     emac->parent.get_addr = emac_w5500_get_addr;
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     emac->parent.add_mac_filter = emac_w5500_add_mac_filter;
     emac->parent.rm_mac_filter = emac_w5500_del_mac_filter;
-#endif
     emac->parent.set_speed = emac_w5500_set_speed;
     emac->parent.set_duplex = emac_w5500_set_duplex;
     emac->parent.set_link = emac_w5500_set_link;
     emac->parent.set_promiscuous = emac_w5500_set_promiscuous;
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     emac->parent.set_all_multicast = emac_w5500_set_all_multicast;
-#endif
     emac->parent.set_peer_pause_ability = emac_w5500_set_peer_pause_ability;
     emac->parent.enable_flow_ctrl = emac_w5500_enable_flow_ctrl;
     emac->parent.transmit = emac_w5500_transmit;

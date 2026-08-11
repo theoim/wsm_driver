@@ -1,5 +1,7 @@
 # How to Test UDP Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and UDP test tool are required for the UDP example test, download and install from below links.
@@ -29,13 +31,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -137,9 +139,9 @@ Same layout as `examples/loopback`:
 | `main/main.c` | orchestration only: bring the chip up, start the task |
 
 The engine calls BSD sockets through the component's `net_sock_ops_t` vtable and
-is handed `net_eth_ops` — the plain `lwip_*` entry points, which the `esp_wiz_toe`
+is handed `net_eth_ops` — the plain `lwip_*` entry points, which the `wsm_driver`
 component redirects to the WIZnet hardware sockets at link time via `-Wl,--wrap`
-(`CONFIG_ESP_WIZ_TOE_SOCKET_WRAP`). Running the same engine on Wi-Fi as well is a
+(`CONFIG_WSM_DRIVER_SOCKET_WRAP`). Running the same engine on Wi-Fi as well is a
 second `udp_echo_start()` call with `net_wifi_ops`.
 
 ## Step 4: Build
@@ -185,18 +187,18 @@ The device echoes the same datagram back to your PC, confirming the UDP loopback
 ## Appendix
 
 - **UDP client role:** Select `EXAMPLE_UDP_CLIENT` in menuconfig. The device then binds port `50000` instead of `5000` and logs each datagram it echoes. Point Hercules at `192.168.11.2:50000` to exercise it.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-hercules]: https://www.hw-group.com/software/hercules-setup-utility
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/run_socket_open.png
-[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/run_hercules.png
-[link-run_loopback]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp/run_loopback.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/run_socket_open.png
+[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/run_hercules.png
+[link-run_loopback]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp/run_loopback.png

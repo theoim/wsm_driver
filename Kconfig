@@ -1,19 +1,19 @@
-menu "WIZnet TOE Component"
+menu "WIZnet WSM Driver"
 
 #
 # Only three things are user-selectable here: the chip, the W6300 QSPI mode,
 # and the per-socket buffer sizes. All SPI wiring (pins / host / clock) is
 # derived from the chip and hidden from menuconfig -- see the per-chip blocks
 # at the bottom. Symbol names are the same for both chips (the port/example
-# code reads CONFIG_ESP_WIZ_TOE_PIN_*); only the values differ.
+# code reads CONFIG_WSM_DRIVER_PIN_*); only the values differ.
 #
 
-config ESP_WIZ_TOE_ENABLED
-    bool "Enable esp_wiz_toe"
+config WSM_DRIVER_ENABLED
+    bool "Enable wsm_driver"
     default y
     depends on IDF_TARGET_ESP32S3
 
-if ESP_WIZ_TOE_ENABLED
+if WSM_DRIVER_ENABLED
 
 # =============================================================================
 # Board selection -- the only hardware choice a user makes
@@ -61,18 +61,18 @@ config ESP_WIZ_TOE_CHIP_W5500
 # Network backend selection
 # =============================================================================
 # TOE and ETH each define wiznet_net_init()/wiznet_net_is_up(), so they are
-# mutually exclusive at link time -- pick exactly one here.
-choice ESP_WIZ_TOE_BACKEND
+# mutually exclusive at link time — pick exactly one here.
+choice WSM_DRIVER_BACKEND
     prompt "Network backend"
-    default ESP_WIZ_TOE_BACKEND_TOE
+    default WSM_DRIVER_BACKEND_TOE
     help
         TOE = WIZnet hardware TCP/IP via the ioLibrary (W5500 or W6300).
         ETH = the chip as a SPI Ethernet MAC (esp_eth MACRAW) + software LwIP.
 
-config ESP_WIZ_TOE_BACKEND_TOE
+config WSM_DRIVER_BACKEND_TOE
     bool "TOE (hardware TCP/IP)"
 
-config ESP_WIZ_TOE_BACKEND_ETH
+config WSM_DRIVER_BACKEND_ETH
     bool "esp_eth MACRAW + software LwIP"
     help
         Runs the chip as a dumb Ethernet MAC (MACRAW on hardware socket 0) and
@@ -90,15 +90,15 @@ endchoice
 # =============================================================================
 # W6300 QSPI mode
 # =============================================================================
-choice ESP_WIZ_TOE_QSPI_MODE
+choice WSM_DRIVER_QSPI_MODE
     prompt "W6300 QSPI mode"
-    depends on ESP_WIZ_TOE_CHIP_W6300
-    default ESP_WIZ_TOE_QSPI_QUAD
+    depends on WSM_DRIVER_CHIP_W6300
+    default WSM_DRIVER_QSPI_QUAD
 
-config ESP_WIZ_TOE_QSPI_SINGLE
+config WSM_DRIVER_QSPI_SINGLE
     bool "Single (1-bit, standard SPI wiring)"
 
-config ESP_WIZ_TOE_QSPI_QUAD
+config WSM_DRIVER_QSPI_QUAD
     bool "Quad (4-bit, requires IO2/IO3 wiring)"
 
 endchoice
@@ -106,12 +106,12 @@ endchoice
 # =============================================================================
 # Per-socket buffer sizes (tunable, chip-independent)
 # =============================================================================
-config ESP_WIZ_TOE_RX_BUF_KB
+config WSM_DRIVER_RX_BUF_KB
     int "Per-socket RX buffer size (KB)"
     range 1 16
     default 2
 
-config ESP_WIZ_TOE_TX_BUF_KB
+config WSM_DRIVER_TX_BUF_KB
     int "Per-socket TX buffer size (KB)"
     range 1 16
     default 2
@@ -119,9 +119,9 @@ config ESP_WIZ_TOE_TX_BUF_KB
 # =============================================================================
 # BSD socket integration (--wrap): route lwIP sockets to the TOE hardware sockets
 # =============================================================================
-config ESP_WIZ_TOE_SOCKET_WRAP
+config WSM_DRIVER_SOCKET_WRAP
     bool 
-    depends on ESP_WIZ_TOE_BACKEND_TOE
+    depends on WSM_DRIVER_BACKEND_TOE
     default y
     help
         When enabled, lwIP's BSD socket entry points (socket/bind/listen/

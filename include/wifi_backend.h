@@ -6,7 +6,7 @@
  * what runs on top (echo server, socket vtable, ...) lives in the example.
  *
  * The example owns the credentials (its net_config.h) and passes them in — the
- * component hardcodes no SSID/password. When CONFIG_ESP_WIZ_TOE_SOCKET_WRAP is
+ * component hardcodes no SSID/password. When CONFIG_WSM_DRIVER_SOCKET_WRAP is
  * enabled (TOE), Wi-Fi traffic must reach the software LwIP via __real_lwip_*
  * to bypass the W5500 --wrap (see the example's wifi_loopback.c).
  */

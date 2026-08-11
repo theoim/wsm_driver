@@ -29,13 +29,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -156,22 +156,22 @@ The `openssl s_server` console shows the incoming connection and receives the te
 
 - **Certificate verification disabled:** For a dependency-free demo, the client sets `MBEDTLS_SSL_VERIFY_NONE`, so the server certificate is not checked. This lets the handshake succeed against a self-signed OpenSSL certificate. For production, load a CA certificate with `mbedtls_x509_crt_parse`, set `mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_REQUIRED)`, and provide it via `mbedtls_ssl_conf_ca_chain`.
 - **mbedTLS:** provided by ESP-IDF, which also supplies the entropy source, so the example sets no RNG callback of its own (the original WIZnet-PICO-C example had to, and used a weak `rand()`).
-- **How one client drives two interfaces:** the TLS logic in `src/ssl_client.c` calls BSD sockets through a vtable, and mbedTLS's BIO is wired to that vtable. For Ethernet it is the plain `lwip_*` set, which the `esp_wiz_toe` component redirects to the chip's hardware sockets at link time (`-Wl,--wrap`, `CONFIG_ESP_WIZ_TOE_SOCKET_WRAP`); for Wi-Fi it is the un-wrapped `__real_lwip_*` set in `src/wifi_ssl_client.c`. The mbedTLS context and config are per task, since two sessions cannot share one `mbedtls_ssl_context`.
+- **How one client drives two interfaces:** the TLS logic in `src/ssl_client.c` calls BSD sockets through a vtable, and mbedTLS's BIO is wired to that vtable. For Ethernet it is the plain `lwip_*` set, which the `wsm_driver` component redirects to the chip's hardware sockets at link time (`-Wl,--wrap`, `CONFIG_WSM_DRIVER_SOCKET_WRAP`); for Wi-Fi it is the un-wrapped `__real_lwip_*` set in `src/wifi_ssl_client.c`. The mbedTLS context and config are per task, since two sessions cannot share one `mbedtls_ssl_context`.
 - **Timeout and reconnect:** TLS reads use `SSL_RECV_TIMEOUT_MS`, implemented with `SO_RCVTIMEO` on the socket (the TOE has no `select()`). After a session ends or fails, the client waits `SSL_RETRY_DELAY_MS` and reconnects. If the handshake never succeeds, confirm the server IP/port and that `s_server` is listening.
 - **W6300 and `SF_FORCE_ARP`:** the original version of this example opened its hardware socket with `SF_FORCE_ARP` and exited on the first failed connect. That flag is not reachable through the BSD socket API, and it is not needed: the `tcp_client` example connects on the same chip with open flags `0`, and recovers from a failed connect by retrying from its `SOCK_CLOSED` state. This client retries the same way, so a lost first SYN costs one `SSL_RETRY_DELAY_MS` rather than the session.
 - **Ethernet only:** remove the `ssl_client_start("wifi", ...)` call (and `wifi_net_init`) from `main/main.c`.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-openssl]: https://www.openssl.org/source/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/run_socket_open.png
-[link-run_handshake]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/run_handshake.png
-[link-run_ssl]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_client_over_ssl/run_ssl.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/run_socket_open.png
+[link-run_handshake]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/run_handshake.png
+[link-run_ssl]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_client_over_ssl/run_ssl.png

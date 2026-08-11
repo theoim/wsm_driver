@@ -45,7 +45,7 @@
 static const char *TAG = "dhcp_dns";
 
 /* Ethernet socket vtable: the plain lwIP BSD entry points. With
- * ESP_WIZ_TOE_SOCKET_WRAP=1 these symbols are --wrap-redirected to the WIZnet
+ * WSM_DRIVER_SOCKET_WRAP=1 these symbols are --wrap-redirected to the WIZnet
  * hardware sockets; with =0 they are software LwIP over esp_eth. Naming lwip_*
  * is correct in BOTH cases, so this needs no #if — writing __wrap_lwip_*
  * explicitly would instead fail to link when the wrap is off. (The Wi-Fi vtable,

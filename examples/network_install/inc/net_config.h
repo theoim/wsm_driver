@@ -3,10 +3,10 @@
  *
  * Network install example configuration.
  *
- * Follows esp_wiz_toe's config conventions:
+ * Follows wsm_driver's config conventions:
  *   - SPI / pin wiring is NOT configured here. It comes from the component
- *     Kconfig (menuconfig -> Component config -> WIZnet TOE Component) and is
- *     applied by net_backend_toe.c via esp_wiz_toe_spi_config_t.
+ *     Kconfig (menuconfig -> Component config -> WIZnet WSM Driver) and is
+ *     applied by net_backend_toe.c via wsm_driver_spi_config_t.
  *   - The network identity is expressed as wiz_NetInfo fields (byte arrays);
  *     main.c assembles a wiz_NetInfo from these macros and hands it to
  *     wiznet_net_init(), which applies it with wizchip_setnetinfo().
@@ -20,7 +20,7 @@
 #ifndef NET_CONFIG_H
 #define NET_CONFIG_H
 
-/* ---- static network identity (esp_wiz_toe style: wiz_NetInfo byte arrays) ---- */
+/* ---- static network identity (wsm_driver style: wiz_NetInfo byte arrays) ---- */
 #define NET_MAC_ADDR          {0x00, 0x08, 0xDC, 0x12, 0x34, 0x56}  /* WIZnet OUI */
 #define NET_IP_ADDR           {192, 168, 11, 2}
 #define NET_SUBNET_MASK       {255, 255, 255, 0}

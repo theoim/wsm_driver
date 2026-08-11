@@ -16,7 +16,7 @@
  *
  *     fd == hardware socket number + LWIP_SOCKET_OFFSET
  *
- * That is an internal rule of esp_wiz_toe, not a published contract. If it ever
+ * That is an internal rule of wsm_driver, not a published contract. If it ever
  * changes this file keeps compiling and starts poking the wrong socket, so the
  * mapping is checked at runtime before anything is written -- see below.
  *
@@ -36,9 +36,9 @@
 
 static const char *TAG = "mcast_join";
 
-#if CONFIG_ESP_WIZ_TOE_SOCKET_WRAP
+#if CONFIG_WSM_DRIVER_SOCKET_WRAP
 
-#include "esp_wiz_toe/Ethernet/socket.h"    /* socket(), close(), setSn_*  */
+#include "wsm_driver/Ethernet/socket.h"    /* socket(), setSn_*, getSn_SR */
 #include "wizchip_conf.h"                   /* _WIZCHIP_SOCK_NUM_          */
 
 /* Dotted quad to four bytes. Deliberately not inet_addr(): that would mean
@@ -86,7 +86,18 @@ int mcast_join_toe(const void *ops, int fd, const char *group, uint16_t port)
      * group address (RFC 1112). */
     uint8_t mac[6] = { 0x01, 0x00, 0x5E, (uint8_t)(g[1] & 0x7F), g[2], g[3] };
 
-    close((uint8_t)sn);
+    /* Deliberately no close() here. ioLibrary's socket() closes the socket
+     * itself before reopening it (Ethernet/socket.c), and calling close() from
+     * this file would not reach ioLibrary's anyway: the component compiles its
+     * own sources with -Dclose=wiz_close so that ioLibrary's close(uint8_t)
+     * stops hijacking newlib's POSIX close(int), and that definition does not
+     * extend to the example. A bare close(sn) here therefore resolves to POSIX
+     * close(), which closes file descriptor `sn` -- 0 being stdin. On a UART
+     * console that passed unnoticed; on USB Serial/JTAG it takes the console
+     * down with it, which is how this was found.
+     *
+     * The registers are written before socket() and survive its internal close;
+     * the chip latches the multicast MAC from them when the socket opens. */
     setSn_DHAR((uint8_t)sn, mac);
     setSn_DIPR((uint8_t)sn, g);
     setSn_DPORT((uint8_t)sn, port);
@@ -102,7 +113,7 @@ int mcast_join_toe(const void *ops, int fd, const char *group, uint16_t port)
     return 0;
 }
 
-#else /* !CONFIG_ESP_WIZ_TOE_SOCKET_WRAP */
+#else /* !CONFIG_WSM_DRIVER_SOCKET_WRAP */
 
 /*
  * With the esp_eth backend the wrap is off, so `fd` is a genuine LwIP socket
@@ -114,9 +125,9 @@ int mcast_join_toe(const void *ops, int fd, const char *group, uint16_t port)
 int mcast_join_toe(const void *ops, int fd, const char *group, uint16_t port)
 {
     (void)ops; (void)fd; (void)group; (void)port;
-    ESP_LOGE(TAG, "mcast_join_toe() called with ESP_WIZ_TOE_SOCKET_WRAP off — "
+    ESP_LOGE(TAG, "mcast_join_toe() called with WSM_DRIVER_SOCKET_WRAP off — "
                   "use mcast_join_bsd() for the esp_eth backend");
     return -1;
 }
 
-#endif /* CONFIG_ESP_WIZ_TOE_SOCKET_WRAP */
+#endif /* CONFIG_WSM_DRIVER_SOCKET_WRAP */

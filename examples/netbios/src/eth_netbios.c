@@ -13,18 +13,18 @@
  * reading the address to answer with, and naming the netif to pin the socket to
  * — and those really do differ between the backends:
  *
- *   - TOE backend (CONFIG_ESP_WIZ_TOE_BACKEND_TOE, the default): the address
+ *   - TOE backend (CONFIG_WSM_DRIVER_BACKEND_TOE, the default): the address
  *     lives in the chip's registers, so it is wizchip_getnetinfo(). The chip
  *     also has no LwIP netif to name, so the socket is not pinned to one — it
  *     IS the interface.
  *
- *   - ETH backend (CONFIG_ESP_WIZ_TOE_BACKEND_ETH): the chip is an esp_eth
+ *   - ETH backend (CONFIG_WSM_DRIVER_BACKEND_ETH): the chip is an esp_eth
  *     MACRAW MAC and the ESP32-S3's software LwIP owns TCP/IP, so this is
  *     exactly the same esp_netif code Wi-Fi uses — only the netif key differs.
  */
 #include "sdkconfig.h"
 
-#if !defined(CONFIG_ESP_WIZ_TOE_BACKEND_ETH)
+#if !defined(CONFIG_WSM_DRIVER_BACKEND_ETH)
 /* ORDER MATTERS — ioLibrary BEFORE lwIP. wizchip_conf.h -> w5500.h defines
  * SOCK_STREAM/SOCK_DGRAM as the Sn_MR protocol values, unguarded, and netbios.h
  * pulls in lwip/sockets.h which defines the same names as the POSIX socket
@@ -38,7 +38,7 @@
 
 #include "netbios.h"
 
-#if defined(CONFIG_ESP_WIZ_TOE_BACKEND_ETH)
+#if defined(CONFIG_WSM_DRIVER_BACKEND_ETH)
 
 /* ======================= ETH backend: esp_netif + LwIP ======================= */
 
@@ -54,7 +54,7 @@ static void eth_get_ifname(char *ifname, size_t ifname_len)
     netif_netbios_get_ifname(NETIF_KEY_ETH, ifname, ifname_len);
 }
 
-#else /* CONFIG_ESP_WIZ_TOE_BACKEND_TOE */
+#else /* CONFIG_WSM_DRIVER_BACKEND_TOE */
 
 /* ================== TOE backend: the chip's own network identity ============= */
 

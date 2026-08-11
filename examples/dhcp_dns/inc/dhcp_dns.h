@@ -8,7 +8,7 @@
  * socket vtable (dhcp_sock_ops_t) and the TOE/LwIP choice is made by the LINKER,
  * not by the source:
  *   - dhcp_lwip_ops (dhcp_dns.c) is the plain lwip_* entry points. With
- *     ESP_WIZ_TOE_SOCKET_WRAP=1 (TOE backend) they are --wrap-redirected to the
+ *     WSM_DRIVER_SOCKET_WRAP=1 (TOE backend) they are --wrap-redirected to the
  *     WIZnet hardware sockets; with =0 (ETH backend) they are the software LwIP
  *     over esp_eth. Correct either way, so no #if.
  *   - dhcp_wifi_sock_ops (netif_dhcp_dns.c) binds __real_lwip_* when the wrap is

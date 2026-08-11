@@ -4,10 +4,10 @@
  * Backend-neutral multi-socket TCP echo server, shared by the Ethernet (WIZnet
  * chip) and Wi-Fi paths. The socket entry points are injected via a vtable so
  * the exact same server logic drives either stack:
- *   - Ethernet: plain lwIP BSD ops (lwip_socket/...). With ESP_WIZ_TOE_SOCKET_WRAP=1
+ *   - Ethernet: plain lwIP BSD ops (lwip_socket/...). With WSM_DRIVER_SOCKET_WRAP=1
  *     these are redirected to the WIZnet hardware sockets by -Wl,--wrap
  *     (wiztoe_wrap.c); with =0 they are the software LwIP over esp_eth.
- *   - Wi-Fi: with ESP_WIZ_TOE_SOCKET_WRAP=1 the __real_lwip_* symbols (bypassing
+ *   - Wi-Fi: with WSM_DRIVER_SOCKET_WRAP=1 the __real_lwip_* symbols (bypassing
  *     --wrap) so the traffic goes to the REAL software LwIP; with =0 the same
  *     lwip_* as Ethernet (both share one stack). See wifi_multi_socket.c.
  */
@@ -40,13 +40,13 @@ typedef struct {
 /*
  * Standard lwIP BSD socket vtable, used by the Ethernet server. These plain
  * lwip_* entry points are redirected to the WIZnet hardware sockets by -Wl,--wrap
- * with ESP_WIZ_TOE_SOCKET_WRAP=1, and are software LwIP over esp_eth with =0.
+ * with WSM_DRIVER_SOCKET_WRAP=1, and are software LwIP over esp_eth with =0.
  */
 extern const multi_socket_ops_t multi_socket_lwip_ops;
 
 /*
  * Wi-Fi socket vtable (defined in wifi_multi_socket.c). With
- * ESP_WIZ_TOE_SOCKET_WRAP=1 this is the __real_lwip_* set that bypasses the
+ * WSM_DRIVER_SOCKET_WRAP=1 this is the __real_lwip_* set that bypasses the
  * --wrap so Wi-Fi traffic reaches the real software LwIP stack.
  */
 extern const multi_socket_ops_t wifi_multi_socket_ops;

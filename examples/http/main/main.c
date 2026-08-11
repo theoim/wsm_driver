@@ -16,7 +16,7 @@
  *   - Wi-Fi STA              on WIFI_HTTP_PORT (vtable: net_wifi_ops)
  *
  * Which stack actually carries the traffic is decided by the LINKER, from
- * `Component config -> WIZnet TOE Component -> Network backend`:
+ * `Component config -> WIZnet WSM Driver -> Network backend`:
  *   - TOE (hardware TCP/IP): net_eth_ops' plain lwip_* calls are redirected to
  *     the chip's hardware sockets by -Wl,--wrap, i.e. every call in http_server.c ends
  *     up in __wrap_lwip_* (see wiztoe_wrap.c);
@@ -31,14 +31,14 @@
  *
  * Wi-Fi is optional: leave WIFI_SSID empty in net_config.h to run Ethernet-only.
  *
- * Config conventions follow esp_wiz_toe:
+ * Config conventions follow wsm_driver:
  *   - SPI / pins  -> component Kconfig, applied by the TOE backend.
  *   - network id  -> the wiz_NetInfo below (byte arrays from net_config.h),
  *                    applied by wiznet_net_init() -> wizchip_setnetinfo().
  *   - web page    -> inc/web_page.h (index_page).
  *
  * Works with W5500 or W6300 — select the chip in menuconfig:
- *   Component config -> WIZnet TOE Component -> WIZnet chip
+ *   Component config -> WIZnet WSM Driver -> WIZnet chip
  */
 #include "sdkconfig.h"
 #include "wizchip_conf.h"       /* wiz_NetInfo, NETINFO_STATIC */
@@ -49,7 +49,7 @@
 #include "net_config.h"
 #include "http_server.h"
 
-/* Network identity — esp_wiz_toe style (wiz_NetInfo). Applied to the WIZnet
+/* Network identity — wsm_driver style (wiz_NetInfo). Applied to the WIZnet
  * chip's hardware TCP/IP stack by wiznet_net_init() -> wizchip_setnetinfo(). */
 static const wiz_NetInfo g_net_info = {
     .mac = NET_MAC_ADDR,

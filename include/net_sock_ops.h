@@ -15,7 +15,7 @@
  *                   un-wrapped originals) to bypass the W5500; with SOCKET_WRAP=0
  *                   it is the same plain lwip_* as Ethernet (one shared stack).
  * The wrap awareness lives entirely here in `port` (which owns the --wrap), so
- * app code stays free of any #if ESP_WIZ_TOE_SOCKET_WRAP.
+ * app code stays free of any #if WSM_DRIVER_SOCKET_WRAP.
  *
  * This is public component API: examples take a vtable by address and hand it to
  * their engine, exactly as examples/loopback does. (loopback still declares a

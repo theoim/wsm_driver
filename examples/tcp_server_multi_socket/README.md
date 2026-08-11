@@ -29,13 +29,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -160,20 +160,20 @@ Confirm that every connection echoes its own data back without interfering with 
 ## Appendix
 
 - **Number of simultaneous clients:** On Ethernet the device serves as many connections as the chip has hardware sockets (8). Each listener runs in its own task and blocks in `accept()`/`recv()`, so the connections do not interfere with each other. The Wi-Fi side serves the same number over the ESP32-S3's own LwIP stack.
-- **How one server drives two interfaces:** the echo logic in `src/multi_socket.c` calls BSD sockets through a vtable. For Ethernet that vtable is the plain `lwip_*` set, which the `esp_wiz_toe` component redirects to the chip's hardware sockets at link time (`-Wl,--wrap`, `CONFIG_ESP_WIZ_TOE_SOCKET_WRAP`); for Wi-Fi it is the un-wrapped `__real_lwip_*` set in `src/wifi_multi_socket.c`, which reaches the software LwIP stack. The application code is identical for both.
+- **How one server drives two interfaces:** the echo logic in `src/multi_socket.c` calls BSD sockets through a vtable. For Ethernet that vtable is the plain `lwip_*` set, which the `wsm_driver` component redirects to the chip's hardware sockets at link time (`-Wl,--wrap`, `CONFIG_WSM_DRIVER_SOCKET_WRAP`); for Wi-Fi it is the un-wrapped `__real_lwip_*` set in `src/wifi_multi_socket.c`, which reaches the software LwIP stack. The application code is identical for both.
 - **Ethernet only:** remove the `multi_socket_start("wifi", ...)` call (and `wifi_net_init`) from `main/main.c`.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-hercules]: https://www.hw-group.com/software/hercules-setup-utility
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/run_socket_open.png
-[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/run_hercules.png
-[link-run_loopback]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/tcp_server_multi_socket/run_loopback.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/run_socket_open.png
+[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/run_hercules.png
+[link-run_loopback]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/tcp_server_multi_socket/run_loopback.png

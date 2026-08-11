@@ -11,7 +11,7 @@
  * app_main only orchestrates: bring the interface up, start the client, and
  * return. The transfer lives in the backend-neutral client tftp_client.c, which
  * takes a socket vtable -- here net_eth_ops, the plain lwIP BSD entry points
- * that the esp_wiz_toe component redirects to the WIZnet hardware sockets at
+ * that the wsm_driver component redirects to the WIZnet hardware sockets at
  * link time via -Wl,--wrap (see wiztoe_wrap.c).
  *
  * The protocol implementation (tftp_core.c) is ioLibrary's, carried in the
@@ -24,14 +24,14 @@
  * concurrent transfers would share it. Set WIFI_SSID and TFTP_OVER_WIFI to run
  * the transfer over Wi-Fi instead of Ethernet.
  *
- * Config conventions follow esp_wiz_toe:
+ * Config conventions follow wsm_driver:
  *   - SPI / pins  -> component Kconfig, applied by the TOE backend.
  *   - network id  -> the wiz_NetInfo below (byte arrays from net_config.h),
  *                    applied by wiznet_net_init() -> wizchip_setnetinfo().
  *   - server/file -> net_config.h.
  *
  * Works with W5500 or W6300 — select the chip in menuconfig:
- *   Component config -> WIZnet TOE Component -> WIZnet chip
+ *   Component config -> WIZnet WSM Driver -> WIZnet chip
  */
 #include "sdkconfig.h"
 #include "wizchip_conf.h"       /* wiz_NetInfo, NETINFO_STATIC */
@@ -46,7 +46,7 @@
  * WIFI_SSID to be filled in. */
 #define TFTP_OVER_WIFI  0
 
-/* Network identity — esp_wiz_toe style (wiz_NetInfo). Applied to the WIZnet
+/* Network identity — wsm_driver style (wiz_NetInfo). Applied to the WIZnet
  * chip's hardware TCP/IP stack by wiznet_net_init() -> wizchip_setnetinfo(). */
 static const wiz_NetInfo g_net_info = {
     .mac = NET_MAC_ADDR,

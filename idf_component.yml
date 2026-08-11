@@ -1,9 +1,9 @@
-name: esp_wiz_toe
-version: "1.0.0"
+name: wsm_driver
+version: "1.1.0"
 description: "ESP-IDF SPI/QSPI port layer for using WIZnet W5500/W6300 with the official ioLibrary"
 license: "MIT"
-repository: "https://github.com/Wiznet/esp_wiz_toe"
-url: "https://github.com/Wiznet/esp_wiz_toe"
+repository: "https://github.com/Wiznet/wsm_driver"
+url: "https://github.com/Wiznet/wsm_driver"
 tags:
   - ethernet
   - wiznet
@@ -16,7 +16,7 @@ targets:
   - esp32s3
 dependencies:
   idf:
-    version: ">=5.4.0"
+    version: ">=6.0.1"
 
 examples:
   - path: examples/dhcp_dns
@@ -27,10 +27,9 @@ examples:
   - path: examples/network_install
   - path: examples/pppoe
   - path: examples/sntp
-  - path: examples/tcp_client
   - path: examples/tcp_client_over_ssl
-  - path: examples/tcp_server
   - path: examples/tcp_server_multi_socket
+  - path: examples/tcp_server_over_ssl
   - path: examples/tftp
   - path: examples/udp
   - path: examples/udp_multicast
@@ -45,7 +44,7 @@ files:
     - "TODO.md"
     - ".componentignore"
     - ".vscode/**"
-    - "esp_wiz_toe.code-workspace"
+    - "wsm_driver.code-workspace"
     - "examples/**/sdkconfig.old"
     - "third_party/ioLibrary_Driver/.git"
     - "third_party/ioLibrary_Driver/**/*.chm"

@@ -23,7 +23,7 @@
 
 static const char *TAG = "sntp";
 
-/* Standard lwIP BSD socket vtable (Ethernet). With ESP_WIZ_TOE_SOCKET_WRAP=1 these
+/* Standard lwIP BSD socket vtable (Ethernet). With WSM_DRIVER_SOCKET_WRAP=1 these
  * lwip_* symbols are --wrap-redirected to the WIZnet chip; with =0 they are
  * software LwIP over esp_eth. Correct either way, so no #if here. */
 const sntp_ops_t sntp_lwip_ops = {

@@ -4,8 +4,8 @@
 
 #include "esp_log.h"
 #include "esp_task_wdt.h"
-#include "esp_wiz_toe.h"
-#include "esp_wiz_toe/Ethernet/socket.h"
+#include "wsm_driver.h"
+#include "wsm_driver/Ethernet/socket.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "wizchip_conf.h"
@@ -18,14 +18,14 @@
 #define EXAMPLE_UDP_LISTEN_PORT 5001
 #define EXAMPLE_IO_TIMEOUT_MS 5000
 
-#ifdef CONFIG_ESP_WIZ_TOE_TX_BUF_KB
-#define EXAMPLE_TX_BUF_KB CONFIG_ESP_WIZ_TOE_TX_BUF_KB
+#ifdef CONFIG_WSM_DRIVER_TX_BUF_KB
+#define EXAMPLE_TX_BUF_KB CONFIG_WSM_DRIVER_TX_BUF_KB
 #else
 #define EXAMPLE_TX_BUF_KB 2
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_RX_BUF_KB
-#define EXAMPLE_RX_BUF_KB CONFIG_ESP_WIZ_TOE_RX_BUF_KB
+#ifdef CONFIG_WSM_DRIVER_RX_BUF_KB
+#define EXAMPLE_RX_BUF_KB CONFIG_WSM_DRIVER_RX_BUF_KB
 #else
 #define EXAMPLE_RX_BUF_KB 2
 #endif
@@ -33,7 +33,7 @@
 static const char *TAG = "w6300_loopback_example";
 
 // Keep large networking buffers out of task stack.
-static esp_wiz_toe_spi_config_t s_spi_cfg;
+static wsm_driver_spi_config_t s_spi_cfg;
 static uint8_t s_buf_size_tx[8];
 static uint8_t s_buf_size_rx[8];
 static uint8_t s_tcp_buf[DATA_BUF_SIZE];
@@ -51,25 +51,25 @@ static const wiz_NetInfo s_net_info = {
     .dhcp = NETINFO_STATIC,
 };
 
-static void fill_spi_config(esp_wiz_toe_spi_config_t *cfg)
+static void fill_spi_config(wsm_driver_spi_config_t *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
 
-    cfg->host_id = (spi_host_device_t)CONFIG_ESP_WIZ_TOE_SPI_HOST;
-    cfg->clock_hz = CONFIG_ESP_WIZ_TOE_SPI_CLOCK_HZ;
-    cfg->pin_miso = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_MISO;
-    cfg->pin_mosi = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_MOSI;
-    cfg->pin_sclk = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_SCLK;
-    cfg->pin_cs = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_CS;
-    cfg->pin_int = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_INT;
-    cfg->pin_rst = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_RST;
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_IO2
-    cfg->pin_io2 = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_IO2;
+    cfg->host_id = (spi_host_device_t)CONFIG_WSM_DRIVER_SPI_HOST;
+    cfg->clock_hz = CONFIG_WSM_DRIVER_SPI_CLOCK_HZ;
+    cfg->pin_miso = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_MISO;
+    cfg->pin_mosi = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_MOSI;
+    cfg->pin_sclk = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_SCLK;
+    cfg->pin_cs = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_CS;
+    cfg->pin_int = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_INT;
+    cfg->pin_rst = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_RST;
+#ifdef CONFIG_WSM_DRIVER_PIN_IO2
+    cfg->pin_io2 = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_IO2;
 #else
     cfg->pin_io2 = GPIO_NUM_NC;
 #endif
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_IO3
-    cfg->pin_io3 = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_IO3;
+#ifdef CONFIG_WSM_DRIVER_PIN_IO3
+    cfg->pin_io3 = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_IO3;
 #else
     cfg->pin_io3 = GPIO_NUM_NC;
 #endif
@@ -86,10 +86,10 @@ static void w6300_loopback_task(void *arg)
 
     fill_spi_config(&s_spi_cfg);
 
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_init(&s_spi_cfg));
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_register_iolib_callbacks());
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_reset());
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_wizchip_check());
+    ESP_ERROR_CHECK(wsm_driver_spi_init(&s_spi_cfg));
+    ESP_ERROR_CHECK(wsm_driver_spi_register_iolib_callbacks());
+    ESP_ERROR_CHECK(wsm_driver_spi_reset());
+    ESP_ERROR_CHECK(wsm_driver_spi_wizchip_check());
 
     if (wizchip_init(s_buf_size_tx, s_buf_size_rx) != 0) {
         ESP_LOGE(TAG, "wizchip_init failed");
@@ -104,7 +104,7 @@ static void w6300_loopback_task(void *arg)
              EXAMPLE_TCP_LISTEN_PORT, EXAMPLE_UDP_LISTEN_PORT);
 
     while (true) {
-        if (esp_wiz_toe_spi_link_is_up(&s_link_up) != ESP_OK || !s_link_up) {
+        if (wsm_driver_spi_link_is_up(&s_link_up) != ESP_OK || !s_link_up) {
             s_link_was_up = false;
             ESP_LOGI(TAG, "PHY link down, waiting...");
             vTaskDelay(pdMS_TO_TICKS(1000));

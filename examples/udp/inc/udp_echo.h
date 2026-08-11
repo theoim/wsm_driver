@@ -4,7 +4,7 @@
  * Backend-neutral UDP echo engine. The socket entry points are injected via the
  * component's net_sock_ops_t vtable, so the exact same logic can drive either
  * stack:
- *   - Ethernet: net_eth_ops (plain lwip_*). With ESP_WIZ_TOE_SOCKET_WRAP=1 these
+ *   - Ethernet: net_eth_ops (plain lwip_*). With WSM_DRIVER_SOCKET_WRAP=1 these
  *     are redirected to the WIZnet hardware sockets by -Wl,--wrap; with =0 they
  *     are the software LwIP over esp_eth. Correct either way, no #if needed.
  *   - Wi-Fi: net_wifi_ops, if this example is ever extended to run on both.

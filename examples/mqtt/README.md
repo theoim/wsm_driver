@@ -32,13 +32,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -66,7 +66,7 @@ Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, a
 
 ### Network backend
 
-`Component config -> WIZnet TOE Component -> Network backend` picks which stack carries the traffic. **The example source does not change** — the choice is made by the linker:
+`Component config -> WIZnet WSM Driver -> Network backend` picks which stack carries the traffic. **The example source does not change** — the choice is made by the linker:
 
 | menuconfig choice | What `src/mqtt.c`'s `ops->socket()` / `ops->recv()` / `ops->send()` resolve to |
 |-------------------|-------------------------------------------------------------------------------|
@@ -252,19 +252,19 @@ I (xxxxx) mqtt: [eth] subscribe_topic/eth : hello from PC
 - **Responsiveness:** `SO_RCVTIMEO` is `MQTT_POLL_MS` (1 s). That is how often the loop gets a turn to publish, ping, or notice a dead link, and therefore also the granularity of `MQTT_PUBLISH_PERIOD_MS`.
 - **Packet size:** `MQTT_BUF_SIZE` (2 KB) bounds both the packets this client builds and the ones it will inspect. A larger inbound publish is consumed and dropped with a warning, so the stream stays in sync.
 - **1 ms tick:** `sdkconfig.defaults` sets `CONFIG_FREERTOS_HZ=1000`. The TOE poll loop (`wiztoe_recv`) yields in 1 ms steps and counts those steps for `SO_RCVTIMEO`; at the IDF default of 100 Hz a 1 ms delay truncates to 0 ticks, which busy-waits and starves the idle task.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-mosquitto]: https://mosquitto.org/download/
 [link-mqttx]: https://mqttx.app/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/run_socket_open.png
-[link-run_subscribe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/run_subscribe.png
-[link-run_publish]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/mqtt/run_publish.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/run_socket_open.png
+[link-run_subscribe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/run_subscribe.png
+[link-run_publish]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/mqtt/run_publish.png

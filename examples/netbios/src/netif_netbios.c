@@ -8,7 +8,7 @@
  *
  * The socket vtable itself is NOT here — it is the component's net_wifi_ops,
  * which is the one place aware of the WIZnet --wrap: with
- * ESP_WIZ_TOE_SOCKET_WRAP=1 it binds __real_lwip_* so Wi-Fi reaches the real
+ * WSM_DRIVER_SOCKET_WRAP=1 it binds __real_lwip_* so Wi-Fi reaches the real
  * software LwIP its netif sits on, and with =0 it is the plain lwip_* both
  * interfaces share. Nothing in this example needs an #if for that.
  */

@@ -13,7 +13,7 @@
  * through a different register map. Only the file layout and the config split
  * follow the loopback-style examples.
  *
- * Config conventions follow esp_wiz_toe:
+ * Config conventions follow wsm_driver:
  *   - SPI / pins  -> component Kconfig, applied by net_backend_toe.c.
  *   - network id  -> the wiz_NetInfo below (byte arrays from net_config.h),
  *                    applied by wiznet_net_init() -> wizchip_setnetinfo().
@@ -28,7 +28,7 @@
 #include "net_config.h"
 #include "pppoe_session.h"
 
-/* Network identity - esp_wiz_toe style (wiz_NetInfo). Applied to the WIZnet
+/* Network identity - wsm_driver style (wiz_NetInfo). Applied to the WIZnet
  * chip's hardware TCP/IP stack by wiznet_net_init() -> wizchip_setnetinfo().
  * PPPoE replaces the address once the session comes up. */
 static const wiz_NetInfo g_net_info = {

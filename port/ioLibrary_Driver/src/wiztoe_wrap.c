@@ -3,7 +3,7 @@
  *
  * Linker --wrap glue: routes lwIP's BSD socket entry points to the WIZnet TOE
  * hardware-socket backend (wiznet_toe.c). Built only when
- * CONFIG_ESP_WIZ_TOE_SOCKET_WRAP is enabled.
+ * CONFIG_WSM_DRIVER_SOCKET_WRAP is enabled.
  *
  * ESP-IDF exposes socket()/recv()/... as static-inline wrappers around
  * lwip_socket()/lwip_recv()/... (LWIP_COMPAT_SOCKETS=0). We intercept those

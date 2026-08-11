@@ -20,11 +20,11 @@ CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS=y
 # The Ethernet side is unaffected: TOE fds come from the chip's 8 hardware
 # sockets and accept() reuses the listener fd.
 CONFIG_LWIP_MAX_SOCKETS=16
-# --- esp_wiz_toe shared settings (copied from loopback) ---
-CONFIG_ESP_WIZ_TOE_ENABLED=y
-CONFIG_ESP_WIZ_TOE_CHIP_W6300=y
-CONFIG_ESP_WIZ_TOE_BACKEND_TOE=y
+# --- wsm_driver shared settings (copied from loopback) ---
+CONFIG_WSM_DRIVER_ENABLED=y
+CONFIG_WSM_DRIVER_CHIP_W6300=y
+CONFIG_WSM_DRIVER_BACKEND_TOE=y
 # pins/clock/QSPI come from the component Kconfig W6300 defaults
 # Route BSD sockets to the WIZnet TOE hardware sockets (builds wiznet_toe.c /
 # wiztoe_wrap.c and adds the lwIP --wrap glue).
-CONFIG_ESP_WIZ_TOE_SOCKET_WRAP=y
+CONFIG_WSM_DRIVER_SOCKET_WRAP=y

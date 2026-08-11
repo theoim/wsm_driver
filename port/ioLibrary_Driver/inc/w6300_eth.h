@@ -28,7 +28,7 @@
  * The dummy phase is emitted by widening the address phase to 24 bits with a
  * trailing driven 0x00 byte — one byte is 8 clocks on 1 line and 2 clocks on 4
  * lines, which is exactly what each mode needs. This matches the official
- * WIZnet reference and the TOE transport in esp_wiz_toe_spi.c bit-for-bit.
+ * WIZnet reference and the TOE transport in wsm_driver_spi.c bit-for-bit.
  *
  * The offsets below are the same ones the vendored w6300.h defines (e.g.
  * _SYSR_ = 0x2000, _Sn_RX_RD_(N) = 0x0228 + SREG block), so they can be
@@ -50,7 +50,7 @@
 
 /* QSPI mode bits embedded in every opcode. Follows the component Kconfig so the
  * esp_eth path and the TOE path drive the bus identically. */
-#ifdef CONFIG_ESP_WIZ_TOE_QSPI_QUAD
+#ifdef CONFIG_WSM_DRIVER_QSPI_QUAD
 #define W6300_QSPI_MODE (0x02 << 6) // 4-bit (quad) mode
 #else
 #define W6300_QSPI_MODE (0x00 << 6) // 1-bit (single) mode

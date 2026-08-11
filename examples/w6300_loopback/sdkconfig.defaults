@@ -4,7 +4,7 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 # CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set
 # Conservative bring-up clock; raise after verifying signal integrity on hardware.
-# --- esp_wiz_toe shared settings (copied from loopback) ---
-CONFIG_ESP_WIZ_TOE_ENABLED=y
-CONFIG_ESP_WIZ_TOE_CHIP_W6300=y
+# --- wsm_driver shared settings (copied from loopback) ---
+CONFIG_WSM_DRIVER_ENABLED=y
+CONFIG_WSM_DRIVER_CHIP_W6300=y
 # pins/clock/QSPI come from the component Kconfig W6300 defaults

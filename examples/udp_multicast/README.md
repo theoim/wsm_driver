@@ -1,5 +1,7 @@
 # How to Test UDP Multicast Example
 
+> **Verified on both chips.** This example was run on a W6300 (QSPI) and on a W5500 (standard SPI, XIAO ESP32-S3), over Ethernet and Wi-Fi in each case.
+
 ## Step 1: Prepare software
 
 The following serial terminal program and UDP test tool are required for the UDP Multicast example test, download and install from below links.
@@ -29,13 +31,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -90,7 +92,7 @@ Network identity, the group and the ports live in `examples/udp_multicast/inc/ne
 Everything the receive engine does — `socket()`, `bind()`, `recvfrom()` — is plain BSD through the vtable. Joining is the one step the two backends cannot express the same way, so it arrives as a function pointer and `main.c` picks the right one:
 
 ```cpp
-#if CONFIG_ESP_WIZ_TOE_SOCKET_WRAP
+#if CONFIG_WSM_DRIVER_SOCKET_WRAP
 #define ETH_JOIN  mcast_join_toe      /* WIZnet hardware sockets */
 #else
 #define ETH_JOIN  mcast_join_bsd      /* esp_eth backend: software LwIP */
@@ -124,6 +126,10 @@ socket(sn, Sn_MR_UDP, port, SF_MULTI_ENABLE);
 
 Datagrams arriving during the reopen are lost. That is acceptable here: a join happens once at start-up, before any traffic is expected.
 
+There is no `close()` before those register writes, and that is deliberate. ioLibrary's `socket()` closes the socket itself before reopening it, so one is not needed — and calling `close()` from this file would not reach ioLibrary's anyway. The component compiles its own sources with `-Dclose=wiz_close` so that ioLibrary's `close(uint8_t)` stops hijacking newlib's POSIX `close(int)`, and that definition does not extend to the example. A bare `close(sn)` here resolves to POSIX `close()`, which closes file **descriptor** `sn` — 0 being stdin.
+
+That was in this file until a W5500 run found it. On a UART console the stray close of fd 0 passed unnoticed and multicast worked anyway, because `socket()`'s own close was doing the real work. On USB Serial/JTAG, where fds 0-2 are the console, it took the console down mid-join and the example looked like it had hung.
+
 `SF_MULTI_ENABLE` belongs in the **flag** argument, not the protocol argument — `socket()` validates it there, and OR-ing it into the protocol gives `0x82`, which matches no protocol case at all.
 
 ### The one non-standard thing in this example
@@ -134,7 +140,7 @@ Datagrams arriving during the reopen are lost. That is acceptable here: a join h
 fd == hardware socket number + LWIP_SOCKET_OFFSET
 ```
 
-That is an internal rule of `esp_wiz_toe`, not a published contract, and it holds **only when `ESP_WIZ_TOE_SOCKET_WRAP` is enabled**. With the esp_eth backend the same vtable is software LwIP: `fd` is a genuine LwIP socket and there is no hardware socket behind it, so `fd - LWIP_SOCKET_OFFSET` would be a number with no meaning. That is what the `#if` in `main.c` is for.
+That is an internal rule of `wsm_driver`, not a published contract, and it holds **only when `WSM_DRIVER_SOCKET_WRAP` is enabled**. With the esp_eth backend the same vtable is software LwIP: `fd` is a genuine LwIP socket and there is no hardware socket behind it, so `fd - LWIP_SOCKET_OFFSET` would be a number with no meaning. That is what the `#if` in `main.c` is for.
 
 If the rule ever changes the file keeps compiling and starts writing to the wrong socket, so it checks before touching anything. `bind()` has just opened this socket for UDP, so the chip must agree it is in `SOCK_UDP`:
 
@@ -302,18 +308,18 @@ Wireshark on the wired adapter with the filter `ip.addr == 224.0.0.5` settles it
 ## Appendix
 
 - **Multicast group and IGMP:** Any host on the same network that sends to this group:port is received, and multiple receivers can join the same group at once. On the WIZnet chip the filtering happens in hardware, so multicast traffic for other groups never wakes the MCU. On the Wi-Fi side LwIP does the filtering and sends IGMP membership reports, which needs `CONFIG_LWIP_IGMP=y` (pinned in `sdkconfig.defaults`).
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-hercules]: https://www.hw-group.com/software/hercules-setup-utility
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/run_socket_open.png
-[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/run_hercules.png
-[link-run_multicast]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/udp_multicast/run_multicast.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/run_socket_open.png
+[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/run_hercules.png
+[link-run_multicast]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/udp_multicast/run_multicast.png

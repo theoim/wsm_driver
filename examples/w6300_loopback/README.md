@@ -29,13 +29,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Check the per-socket buffer size. The SPI host, clock, and pins follow the W6300 automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example is **pinned to the W6300** chip (`sdkconfig.defaults` sets `CONFIG_ESP_WIZ_TOE_CHIP_W6300=y`). Leave the chip fixed to W6300 under `Component config -> WIZnet TOE Component -> WIZnet chip`. You can choose between **Single** and **Quad** SPI mode under `Component config -> WIZnet TOE Component -> W6300 QSPI mode`.
+> This example is **pinned to the W6300** chip (`sdkconfig.defaults` sets `CONFIG_WSM_DRIVER_CHIP_W6300=y`). Leave the chip fixed to W6300 under `Component config -> WIZnet WSM Driver -> WIZnet chip`. You can choose between **Single** and **Quad** SPI mode under `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`.
 
 **W6300 wiring (QSPI)**
 
@@ -123,19 +123,19 @@ In Hercules, select the **UDP** tab, set the module IP `192.168.11.2` and port `
 ## Appendix
 
 - **Two listeners at once:** The loopback task services the TCP socket (`EXAMPLE_TCP_SOCKET_NUM 0`) and the UDP socket (`EXAMPLE_UDP_SOCKET_NUM 1`) in the same loop, so you can test both ports without reflashing.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses only the D0/D1 lines as a standard 4-wire SPI bus.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses only the D0/D1 lines as a standard 4-wire SPI bus.
 - **Link status:** While the Ethernet cable is unplugged the device logs `PHY link down, waiting...` once per second and resumes automatically when the link returns.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-hercules]: https://www.hw-group.com/software/hercules-setup-utility
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/run_socket_open.png
-[link-run_tcp]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/run_tcp.png
-[link-run_udp]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/w6300_loopback/run_udp.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/run_socket_open.png
+[link-run_tcp]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/run_tcp.png
+[link-run_udp]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/w6300_loopback/run_udp.png

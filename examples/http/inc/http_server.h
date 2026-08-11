@@ -3,7 +3,7 @@
  *
  * Backend-neutral HTTP/1.1 server. The socket entry points are injected via the
  * component's net_sock_ops_t vtable, so the same server drives either stack:
- *   - Ethernet: net_eth_ops (plain lwip_*). With ESP_WIZ_TOE_SOCKET_WRAP=1 these
+ *   - Ethernet: net_eth_ops (plain lwip_*). With WSM_DRIVER_SOCKET_WRAP=1 these
  *     are redirected to the WIZnet hardware sockets by -Wl,--wrap (so every call
  *     lands in __wrap_lwip_*); with =0 they are the software LwIP over esp_eth
  *     (so every call lands in lwip_*). Correct either way, no #if needed.

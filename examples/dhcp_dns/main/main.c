@@ -21,7 +21,7 @@
  * used. Each interface supplies only what a socket cannot do — its MAC/netif
  * name and how to install the lease (eth_dhcp_dns.c / netif_dhcp_dns.c).
  *
- * Config conventions follow esp_wiz_toe:
+ * Config conventions follow wsm_driver:
  *   - SPI / pins  -> component Kconfig, applied by net_backend_toe.c.
  *   - network id  -> the wiz_NetInfo below (byte arrays from net_config.h),
  *                    applied by wiznet_net_init() -> wizchip_setnetinfo().
@@ -41,7 +41,7 @@
 #include "net_config.h"
 #include "dhcp_dns.h"
 
-/* Network identity — esp_wiz_toe style (wiz_NetInfo). Applied to the WIZnet
+/* Network identity — wsm_driver style (wiz_NetInfo). Applied to the WIZnet
  * chip's hardware TCP/IP stack by wiznet_net_init() -> wizchip_setnetinfo(). */
 static const wiz_NetInfo g_net_info = {
     .mac = NET_MAC_ADDR,

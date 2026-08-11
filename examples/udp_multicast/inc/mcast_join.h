@@ -38,11 +38,11 @@ typedef int (*mcast_join_fn)(const void *ops, int fd,
                              const char *group, uint16_t port);
 
 /* Software LwIP: one setsockopt. Use for Wi-Fi, and for Ethernet when the
- * esp_eth backend is selected (ESP_WIZ_TOE_SOCKET_WRAP=0). */
+ * esp_eth backend is selected (WSM_DRIVER_SOCKET_WRAP=0). */
 int mcast_join_bsd(const void *ops, int fd, const char *group, uint16_t port);
 
 /* WIZnet hardware sockets: reopen the chip socket with the group programmed.
- * Only valid when ESP_WIZ_TOE_SOCKET_WRAP=1 -- see mcast_join_toe.c. */
+ * Only valid when WSM_DRIVER_SOCKET_WRAP=1 -- see mcast_join_toe.c. */
 int mcast_join_toe(const void *ops, int fd, const char *group, uint16_t port);
 
 /*

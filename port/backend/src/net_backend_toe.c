@@ -1,18 +1,18 @@
 /*
  * SPDX-License-Identifier: BSD-3-Clause
  *
- * TOE backend (CONFIG_ESP_WIZ_TOE_BACKEND_TOE) implementation of the
+ * TOE backend (CONFIG_WSM_DRIVER_BACKEND_TOE) implementation of the
  * backend-neutral harness (net_backend.h). The W5500/W6300 runs the TCP/IP
  * stack in hardware (ioLibrary); no data flows through lwIP.
  *
- * Config conventions follow esp_wiz_toe:
- *   - pins / SPI -> esp_wiz_toe_spi_config_t built from Kconfig (CONFIG_ESP_WIZ_TOE_*),
- *                   applied by esp_wiz_toe_spi_init() (see esp_wiz_toe.h).
+ * Config conventions follow wsm_driver:
+ *   - pins / SPI -> wsm_driver_spi_config_t built from Kconfig (CONFIG_WSM_DRIVER_*),
+ *                   applied by wsm_driver_spi_init() (see wsm_driver.h).
  *   - network    -> the caller's wiz_NetInfo, applied with wizchip_setnetinfo().
  *
  * A SHADOW esp_netif holds the same IPv4 identity: esp_netif_init() also
  * registers the lwIP socket VFS fd-range, which is what makes close()/read()/
- * write() on the TOE fds dispatch to __wrap_lwip_* when CONFIG_ESP_WIZ_TOE_
+ * write() on the TOE fds dispatch to __wrap_lwip_* when CONFIG_WSM_DRIVER_
  * SOCKET_WRAP is enabled (see ioLibrary_Driver/wiztoe_wrap.c). No driver is
  * attached to the shadow netif and no data passes through it.
  *
@@ -29,7 +29,7 @@
 
 #include "wizchip_conf.h"   /* wiz_NetInfo, wizchip_init, wizchip_setnetinfo */
 
-#include "esp_wiz_toe.h"    /* esp_wiz_toe_spi_config_t + Kconfig SPI transport */
+#include "wsm_driver.h"    /* wsm_driver_spi_config_t + Kconfig SPI transport */
 #include "net_backend.h"
 
 static const char *TAG = "wiztoe_net";
@@ -37,32 +37,32 @@ static esp_netif_t *s_shadow;
 static bool s_net_up;
 
 /* Per-socket buffer sizes (KB) from Kconfig, applied to all 8 sockets. */
-#ifdef CONFIG_ESP_WIZ_TOE_TX_BUF_KB
-#define TOE_TX_BUF_KB CONFIG_ESP_WIZ_TOE_TX_BUF_KB
+#ifdef CONFIG_WSM_DRIVER_TX_BUF_KB
+#define TOE_TX_BUF_KB CONFIG_WSM_DRIVER_TX_BUF_KB
 #else
 #define TOE_TX_BUF_KB 2
 #endif
-#ifdef CONFIG_ESP_WIZ_TOE_RX_BUF_KB
-#define TOE_RX_BUF_KB CONFIG_ESP_WIZ_TOE_RX_BUF_KB
+#ifdef CONFIG_WSM_DRIVER_RX_BUF_KB
+#define TOE_RX_BUF_KB CONFIG_WSM_DRIVER_RX_BUF_KB
 #else
 #define TOE_RX_BUF_KB 2
 #endif
 
-/* Fill the SPI/pin config from the component Kconfig (esp_wiz_toe convention). */
-static void fill_spi_config(esp_wiz_toe_spi_config_t *cfg)
+/* Fill the SPI/pin config from the component Kconfig (wsm_driver convention). */
+static void fill_spi_config(wsm_driver_spi_config_t *cfg)
 {
     memset(cfg, 0, sizeof(*cfg));
-    cfg->host_id  = (spi_host_device_t)CONFIG_ESP_WIZ_TOE_SPI_HOST;
-    cfg->clock_hz = CONFIG_ESP_WIZ_TOE_SPI_CLOCK_HZ;
-    cfg->pin_miso = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_MISO;
-    cfg->pin_mosi = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_MOSI;
-    cfg->pin_sclk = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_SCLK;
-    cfg->pin_cs   = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_CS;
-    cfg->pin_rst  = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_RST;
-    cfg->pin_int  = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_INT;
-#if defined(CONFIG_ESP_WIZ_TOE_QSPI_QUAD)
-    cfg->pin_io2  = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_IO2;
-    cfg->pin_io3  = (gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_IO3;
+    cfg->host_id  = (spi_host_device_t)CONFIG_WSM_DRIVER_SPI_HOST;
+    cfg->clock_hz = CONFIG_WSM_DRIVER_SPI_CLOCK_HZ;
+    cfg->pin_miso = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_MISO;
+    cfg->pin_mosi = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_MOSI;
+    cfg->pin_sclk = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_SCLK;
+    cfg->pin_cs   = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_CS;
+    cfg->pin_rst  = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_RST;
+    cfg->pin_int  = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_INT;
+#if defined(CONFIG_WSM_DRIVER_QSPI_QUAD)
+    cfg->pin_io2  = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_IO2;
+    cfg->pin_io3  = (gpio_num_t)CONFIG_WSM_DRIVER_PIN_IO3;
 #else
     cfg->pin_io2  = (gpio_num_t)-1;
     cfg->pin_io3  = (gpio_num_t)-1;
@@ -94,12 +94,12 @@ void wiznet_net_init(const wiz_NetInfo *net_info)
     }
 
     /* 3) W5500/W6300 over SPI via ioLibrary, wired from Kconfig. */
-    esp_wiz_toe_spi_config_t spi;
+    wsm_driver_spi_config_t spi;
     fill_spi_config(&spi);
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_init(&spi));
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_register_iolib_callbacks());
-    ESP_ERROR_CHECK(esp_wiz_toe_spi_reset());
-    if (esp_wiz_toe_spi_wizchip_check() != ESP_OK) {
+    ESP_ERROR_CHECK(wsm_driver_spi_init(&spi));
+    ESP_ERROR_CHECK(wsm_driver_spi_register_iolib_callbacks());
+    ESP_ERROR_CHECK(wsm_driver_spi_reset());
+    if (wsm_driver_spi_wizchip_check() != ESP_OK) {
         ESP_LOGW(TAG, "wizchip id/version check failed (continuing)");
     }
 

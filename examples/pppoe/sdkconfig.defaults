@@ -10,16 +10,16 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 # with Xtensa specreg.h's MR. sdkconfig is gitignored, so without pinning it here
 # the result depends on which IDF version happened to generate it first.
 CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS=y
-# --- esp_wiz_toe shared settings (copied from loopback) ---
-CONFIG_ESP_WIZ_TOE_ENABLED=y
+# --- wsm_driver shared settings (copied from loopback) ---
+CONFIG_WSM_DRIVER_ENABLED=y
 # W5500 ONLY. The vendored PPPoE.c drives the W5100S/W5500 PPPoE registers
 # (getMR/getPSID/...), which the W6300 does not have -- it exposes PPPoE through
 # a different register map (PSIDR/PHAR/NETMR2). Selecting W6300 here trips the
 # #error in src/pppoe_session.c, which is what used to happen with the shared
 # W6300 default copied from the other examples.
-CONFIG_ESP_WIZ_TOE_CHIP_W5500=y
-CONFIG_ESP_WIZ_TOE_BACKEND_TOE=y
+CONFIG_WSM_DRIVER_CHIP_W5500=y
+CONFIG_WSM_DRIVER_BACKEND_TOE=y
 # pins/clock come from the component Kconfig W5500 defaults
 # No BSD sockets here: PPPoE is negotiated through the chip's own registers, so
 # the lwIP --wrap glue (and the ioLibrary close() rename it brings) is not needed.
-CONFIG_ESP_WIZ_TOE_SOCKET_WRAP=n
+CONFIG_WSM_DRIVER_SOCKET_WRAP=n

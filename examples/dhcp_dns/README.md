@@ -28,13 +28,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -166,24 +166,24 @@ Seeing the `target domain` and its resolved IP confirms that both DHCP and DNS w
   ops->sock->sendto(fd, msg, len, 0, &broadcast, sizeof(broadcast));
   ```
 
-  With `CONFIG_ESP_WIZ_TOE_BACKEND_TOE` those `lwip_*` symbols are redirected by `-Wl,--wrap` to `__wrap_lwip_sendto` → the chip's hardware sockets; with `CONFIG_ESP_WIZ_TOE_BACKEND_ETH` they are the plain software-LwIP `lwip_sendto`. **One source, no `#if`** — the linker picks. The ioLibrary `DHCP_run()`/`DNS_run()` clients are not used and do not end up in the binary; they could not serve both backends because they bypass `lwip_*` entirely and talk to the chip's registers, leaving `--wrap` nothing to intercept.
+  With `CONFIG_WSM_DRIVER_BACKEND_TOE` those `lwip_*` symbols are redirected by `-Wl,--wrap` to `__wrap_lwip_sendto` → the chip's hardware sockets; with `CONFIG_WSM_DRIVER_BACKEND_ETH` they are the plain software-LwIP `lwip_sendto`. **One source, no `#if`** — the linker picks. The ioLibrary `DHCP_run()`/`DNS_run()` clients are not used and do not end up in the binary; they could not serve both backends because they bypass `lwip_*` entirely and talk to the chip's registers, leaving `--wrap` nothing to intercept.
 - **Two interfaces, one engine:** `main.c` calls `dhcp_dns_start()` twice with identical arguments except the label, vtable and readiness predicate. Both run the same protocol code; the vtable only supplies the socket symbols plus the two operations a socket cannot perform — reading the interface MAC and installing a lease.
 - **What stays per-backend, and why:** `dhcp_dns_ops_t` has just two hooks. `prepare()` reports the chaddr and the LwIP netif name, and stops whatever DHCP client the stack runs on its own. `apply_lease()` installs the result — `wizchip_setnetinfo()` on TOE, `esp_netif_set_ip_info()` on LwIP. There is no socket call for either.
 - **Sharing UDP port 68:** on the ETH backend both interfaces live on one LwIP stack, so both DHCP sockets bind port 68 with `SO_REUSEADDR` and each sees the other's broadcasts. Every reply is checked against the transaction ID *and* the `chaddr`, so the two clients never consume each other's leases. `SO_BINDTODEVICE` additionally pins each socket to its own netif, so a `255.255.255.255` send leaves through the right interface instead of `netif_default`. The TOE `--wrap` accepts that option as a no-op — the chip *is* the interface.
 - **DHCP/DNS retry:** one round is `DHCP_XMIT_TRIES` transmits with a linear backoff; when a round expires the engine logs `DHCP timeout occurred and retry N` and counts it against `DHCP_DNS_RETRY_COUNT`. After the last retry that interface's task logs `DHCP failed` / `DNS failed` and exits, leaving the other interface running. Check that the Ethernet cable is connected to a DHCP-enabled network.
 - **Renewal** restarts from `DHCPDISCOVER` at T1 (half the lease) rather than unicasting a `DHCPREQUEST` in RENEWING state — servers hand back the same address. **Duplicate-address detection is not implemented**: RFC 2131 specifies an ARP probe, and there is no portable way to send one through a BSD socket, so `DHCP_DNS_CONFLICT` is never reported.
 - **Wi-Fi lease timing:** `wifi_net_is_up()` only returns true after `IP_EVENT_STA_GOT_IP`, so Wi-Fi already holds an esp_netif lease when the task starts. `prepare()` then stops that client and this example leases the address again itself, so the Wi-Fi side takes a few seconds longer than it used to.
-- **ETH backend:** with `CONFIG_ESP_WIZ_TOE_BACKEND_ETH` the chip runs as an esp_eth MACRAW MAC and Ethernet uses the same esp_netif hooks Wi-Fi does — only the netif key differs. `main.c` and the protocol code are unchanged.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **ETH backend:** with `CONFIG_WSM_DRIVER_BACKEND_ETH` the chip runs as an esp_eth MACRAW MAC and Ethernet uses the same esp_netif hooks Wi-Fi does — only the netif key differs. `main.c` and the protocol code are unchanged.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/build_log.png
-[link-run_dhcp]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/run_dhcp.png
-[link-run_dns]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/dhcp_dns/run_dns.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/build_log.png
+[link-run_dhcp]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/run_dhcp.png
+[link-run_dns]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/dhcp_dns/run_dns.png

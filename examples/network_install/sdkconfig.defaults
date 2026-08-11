@@ -11,12 +11,12 @@ CONFIG_COMPILER_OPTIMIZATION_PERF=y
 # happened to generate it first.
 CONFIG_COMPILER_DISABLE_DEFAULT_ERRORS=y
 # WIZnet chip defaults to W5500; switch to W6300 in menuconfig:
-#   Component config -> WIZnet TOE Component -> WIZnet chip
-# --- esp_wiz_toe shared settings (copied from loopback) ---
-CONFIG_ESP_WIZ_TOE_ENABLED=y
-CONFIG_ESP_WIZ_TOE_CHIP_W6300=y
-CONFIG_ESP_WIZ_TOE_BACKEND_TOE=y
+#   Component config -> WIZnet WSM Driver -> WIZnet chip
+# --- wsm_driver shared settings (copied from loopback) ---
+CONFIG_WSM_DRIVER_ENABLED=y
+CONFIG_WSM_DRIVER_CHIP_W6300=y
+CONFIG_WSM_DRIVER_BACKEND_TOE=y
 # pins/clock/QSPI come from the component Kconfig W6300 defaults
 # No BSD sockets here: this example only reads the chip's PHY registers, so the
 # lwIP --wrap glue (and the ioLibrary close() rename it brings) is not needed.
-CONFIG_ESP_WIZ_TOE_SOCKET_WRAP=n
+CONFIG_WSM_DRIVER_SOCKET_WRAP=n

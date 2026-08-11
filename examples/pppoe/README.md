@@ -18,7 +18,7 @@ A PPPoE server / access concentrator is also required (for example an ISP DSL mo
 
 ## Step 3: Setup PPPoE Example
 
-> **This example is W5500 only.** The vendored PPPoE driver uses W5500 PPPoE registers that do not exist on the W6300, and the example will fail to compile (`#error`) on any other chip. The shipped `sdkconfig.defaults` selects **W6300** (`CONFIG_ESP_WIZ_TOE_CHIP_W6300=y`), so you **must change the chip to W5500** under `Component config -> WIZnet TOE Component -> WIZnet chip` before building.
+> **This example is W5500 only.** The vendored PPPoE driver uses W5500 PPPoE registers that do not exist on the W6300, and the example will fail to compile (`#error`) on any other chip. The shipped `sdkconfig.defaults` selects **W6300** (`CONFIG_WSM_DRIVER_CHIP_W6300=y`), so you **must change the chip to W5500** under `Component config -> WIZnet WSM Driver -> WIZnet chip` before building.
 
 ### Chip and SPI configuration
 
@@ -32,7 +32,7 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose **W5500** as the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
@@ -142,12 +142,12 @@ If the session cannot be established (wrong credentials, no PPPoE server reachab
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/build_log.png
-[link-run_start]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/run_start.png
-[link-run_success]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/run_success.png
-[link-run_failed]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/pppoe/run_failed.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/build_log.png
+[link-run_start]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/run_start.png
+[link-run_success]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/run_success.png
+[link-run_failed]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/pppoe/run_failed.png

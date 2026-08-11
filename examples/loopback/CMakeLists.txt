@@ -3,4 +3,4 @@ cmake_minimum_required(VERSION 3.16)
 set(EXTRA_COMPONENT_DIRS "../../")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(esp_wiz_toe_loopback_example)
+project(wsm_driver_loopback_example)

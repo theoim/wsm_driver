@@ -3,8 +3,8 @@
  *
  * WIZnet TOE backend bring-up (see src/net_backend_toe.c).
  *
- * Config conventions follow esp_wiz_toe:
- *   - pins / SPI -> esp_wiz_toe_spi_config_t built from Kconfig (CONFIG_ESP_WIZ_TOE_*)
+ * Config conventions follow wsm_driver:
+ *   - pins / SPI -> wsm_driver_spi_config_t built from Kconfig (CONFIG_WSM_DRIVER_*)
  *   - network    -> wiz_NetInfo + wizchip_setnetinfo() (ioLibrary standard)
  */
 #ifndef NET_BACKEND_H

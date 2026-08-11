@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: CC0-1.0
  *
  * Ethernet (W5500) socket vtable: the plain lwIP BSD entry points. With
- * ESP_WIZ_TOE_SOCKET_WRAP=1 these lwip_* symbols are --wrap-redirected to the
+ * WSM_DRIVER_SOCKET_WRAP=1 these lwip_* symbols are --wrap-redirected to the
  * W5500 hardware sockets; with =0 they are software LwIP over esp_eth. Naming
  * lwip_* is correct in BOTH cases, so this file needs no #if — writing
  * __wrap_lwip_* explicitly would instead fail to link when the wrap is off.

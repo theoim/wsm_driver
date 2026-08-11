@@ -7,7 +7,7 @@
  * the netif key as a parameter.
  *
  * This file is the ONE place aware of the WIZnet --wrap. With
- * ESP_WIZ_TOE_SOCKET_WRAP=1 the plain lwip_* symbols are redirected to the
+ * WSM_DRIVER_SOCKET_WRAP=1 the plain lwip_* symbols are redirected to the
  * chip's hardware sockets, so Wi-Fi must bind to the linker's __real_lwip_*
  * (the un-wrapped originals) to reach the REAL software LwIP stack its netif is
  * attached to. With =0 there is no --wrap and Wi-Fi and Ethernet share one LwIP
@@ -25,10 +25,10 @@ static const char *TAG = "netif_dhcp_dns";
 
 /* ---- Wi-Fi socket vtable ---- */
 
-#if defined(ESP_WIZ_TOE_SOCKET_WRAP) && (ESP_WIZ_TOE_SOCKET_WRAP)
+#if defined(WSM_DRIVER_SOCKET_WRAP) && (WSM_DRIVER_SOCKET_WRAP)
 /* Un-wrapped LwIP entry points provided by the linker because these symbols are
- * listed in --wrap (see the esp_wiz_toe component CMakeLists, which also defines
- * ESP_WIZ_TOE_SOCKET_WRAP PUBLIC). Calling __real_* bypasses the chip. */
+ * listed in --wrap (see the wsm_driver component CMakeLists, which also defines
+ * WSM_DRIVER_SOCKET_WRAP PUBLIC). Calling __real_* bypasses the chip. */
 extern int     __real_lwip_socket(int domain, int type, int protocol);
 extern int     __real_lwip_bind(int s, const struct sockaddr *name, socklen_t namelen);
 extern ssize_t __real_lwip_sendto(int s, const void *data, size_t size, int flags,

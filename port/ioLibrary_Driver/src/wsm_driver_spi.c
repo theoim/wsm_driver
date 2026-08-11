@@ -1,4 +1,4 @@
-#include "esp_wiz_toe.h"
+#include "wsm_driver.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -14,21 +14,21 @@
 
 #if __has_include("wizchip_conf.h")
 #include "wizchip_conf.h"
-#define ESP_WIZ_TOE_HAS_IOLIB 1
+#define WSM_DRIVER_HAS_IOLIB 1
 #else
-#define ESP_WIZ_TOE_HAS_IOLIB 0
+#define WSM_DRIVER_HAS_IOLIB 0
 #endif
 
 /* W6300 uses QSPI framing (opcode + 16-bit address + dummy + data) instead of
  * the W5500 byte/burst callback interface. The defined(W6300) guard keeps the
  * comparison safe when ioLibrary headers are absent. */
-#if ESP_WIZ_TOE_HAS_IOLIB && defined(W6300) && (_WIZCHIP_ == W6300)
-#define ESP_WIZ_TOE_USE_QSPI 1
+#if WSM_DRIVER_HAS_IOLIB && defined(W6300) && (_WIZCHIP_ == W6300)
+#define WSM_DRIVER_USE_QSPI 1
 #else
-#define ESP_WIZ_TOE_USE_QSPI 0
+#define WSM_DRIVER_USE_QSPI 0
 #endif
 
-static const char *TAG = "esp_wiz_toe_spi";
+static const char *TAG = "wsm_driver_spi";
 
 /* Round a sub-tick millisecond delay up to one tick. pdMS_TO_TICKS() truncates,
  * so at the ESP-IDF default CONFIG_FREERTOS_HZ=100 anything below 10 ms becomes
@@ -36,111 +36,111 @@ static const char *TAG = "esp_wiz_toe_spi";
  * (wiztoe_accept/recv) that starves the lower-priority idle task and trips the
  * task watchdog, so every delay here must be at least 1 tick regardless of the
  * tick rate the surrounding project happens to use. */
-#define ESP_WIZ_TOE_DELAY_TICKS(ms) \
+#define WSM_DRIVER_DELAY_TICKS(ms) \
     (pdMS_TO_TICKS(ms) > 0 ? pdMS_TO_TICKS(ms) : (TickType_t)1)
 
 /* ---- neutral port helpers (toe_port.h) ----
  * Provided here (the TOE SPI transport TU) so wiznet_toe.c stays free of any
  * FreeRTOS/esp_timer headers. Both TUs are TOE-only, so these are always linked
  * exactly when needed and never pulled into the esp_eth backend. */
-void toe_yield_1ms(void)   { vTaskDelay(ESP_WIZ_TOE_DELAY_TICKS(1)); }
+void toe_yield_1ms(void)   { vTaskDelay(WSM_DRIVER_DELAY_TICKS(1)); }
 uint32_t toe_time_us(void) { return (uint32_t)esp_timer_get_time(); }
 
-#ifdef CONFIG_ESP_WIZ_TOE_SPI_HOST
-#define ESP_WIZ_TOE_DEF_SPI_HOST ((spi_host_device_t)CONFIG_ESP_WIZ_TOE_SPI_HOST)
+#ifdef CONFIG_WSM_DRIVER_SPI_HOST
+#define WSM_DRIVER_DEF_SPI_HOST ((spi_host_device_t)CONFIG_WSM_DRIVER_SPI_HOST)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_HOST SPI2_HOST
+#define WSM_DRIVER_DEF_SPI_HOST SPI2_HOST
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_SPI_CLOCK_HZ
-#define ESP_WIZ_TOE_DEF_SPI_CLOCK_HZ CONFIG_ESP_WIZ_TOE_SPI_CLOCK_HZ
+#ifdef CONFIG_WSM_DRIVER_SPI_CLOCK_HZ
+#define WSM_DRIVER_DEF_SPI_CLOCK_HZ CONFIG_WSM_DRIVER_SPI_CLOCK_HZ
 #else
-#define ESP_WIZ_TOE_DEF_SPI_CLOCK_HZ (20 * 1000 * 1000)
+#define WSM_DRIVER_DEF_SPI_CLOCK_HZ (20 * 1000 * 1000)
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_MISO
-#define ESP_WIZ_TOE_DEF_SPI_MISO_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_MISO)
+#ifdef CONFIG_WSM_DRIVER_PIN_MISO
+#define WSM_DRIVER_DEF_SPI_MISO_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_MISO)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_MISO_PIN GPIO_NUM_13
+#define WSM_DRIVER_DEF_SPI_MISO_PIN GPIO_NUM_13
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_MOSI
-#define ESP_WIZ_TOE_DEF_SPI_MOSI_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_MOSI)
+#ifdef CONFIG_WSM_DRIVER_PIN_MOSI
+#define WSM_DRIVER_DEF_SPI_MOSI_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_MOSI)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_MOSI_PIN GPIO_NUM_11
+#define WSM_DRIVER_DEF_SPI_MOSI_PIN GPIO_NUM_11
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_SCLK
-#define ESP_WIZ_TOE_DEF_SPI_CLK_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_SCLK)
+#ifdef CONFIG_WSM_DRIVER_PIN_SCLK
+#define WSM_DRIVER_DEF_SPI_CLK_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_SCLK)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_CLK_PIN GPIO_NUM_12
+#define WSM_DRIVER_DEF_SPI_CLK_PIN GPIO_NUM_12
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_CS
-#define ESP_WIZ_TOE_DEF_SPI_CS_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_CS)
+#ifdef CONFIG_WSM_DRIVER_PIN_CS
+#define WSM_DRIVER_DEF_SPI_CS_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_CS)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_CS_PIN GPIO_NUM_10
+#define WSM_DRIVER_DEF_SPI_CS_PIN GPIO_NUM_10
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_RST
-#define ESP_WIZ_TOE_DEF_SPI_RST_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_RST)
+#ifdef CONFIG_WSM_DRIVER_PIN_RST
+#define WSM_DRIVER_DEF_SPI_RST_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_RST)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_RST_PIN GPIO_NUM_9
+#define WSM_DRIVER_DEF_SPI_RST_PIN GPIO_NUM_9
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_INT
-#define ESP_WIZ_TOE_DEF_SPI_INT_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_INT)
+#ifdef CONFIG_WSM_DRIVER_PIN_INT
+#define WSM_DRIVER_DEF_SPI_INT_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_INT)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_INT_PIN GPIO_NUM_14
+#define WSM_DRIVER_DEF_SPI_INT_PIN GPIO_NUM_14
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_IO2
-#define ESP_WIZ_TOE_DEF_SPI_IO2_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_IO2)
+#ifdef CONFIG_WSM_DRIVER_PIN_IO2
+#define WSM_DRIVER_DEF_SPI_IO2_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_IO2)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_IO2_PIN GPIO_NUM_15
+#define WSM_DRIVER_DEF_SPI_IO2_PIN GPIO_NUM_15
 #endif
 
-#ifdef CONFIG_ESP_WIZ_TOE_PIN_IO3
-#define ESP_WIZ_TOE_DEF_SPI_IO3_PIN ((gpio_num_t)CONFIG_ESP_WIZ_TOE_PIN_IO3)
+#ifdef CONFIG_WSM_DRIVER_PIN_IO3
+#define WSM_DRIVER_DEF_SPI_IO3_PIN ((gpio_num_t)CONFIG_WSM_DRIVER_PIN_IO3)
 #else
-#define ESP_WIZ_TOE_DEF_SPI_IO3_PIN GPIO_NUM_16
+#define WSM_DRIVER_DEF_SPI_IO3_PIN GPIO_NUM_16
 #endif
 
-#define ESP_WIZ_TOE_DEF_SPI_TIMEOUT_MS 1000U
+#define WSM_DRIVER_DEF_SPI_TIMEOUT_MS 1000U
 
 typedef struct {
     bool initialized;
     bool cs_active;
     spi_device_handle_t spi_dev;
     SemaphoreHandle_t lock;
-    esp_wiz_toe_spi_config_t cfg;
-} esp_wiz_toe_spi_context_t;
+    wsm_driver_spi_config_t cfg;
+} wsm_driver_spi_context_t;
 
-static esp_wiz_toe_spi_context_t s_ctx;
+static wsm_driver_spi_context_t s_ctx;
 
 static gpio_num_t resolve_pin(gpio_num_t configured, gpio_num_t fallback)
 {
     return configured >= 0 ? configured : fallback;
 }
 
-static void apply_defaults(esp_wiz_toe_spi_config_t *cfg)
+static void apply_defaults(wsm_driver_spi_config_t *cfg)
 {
     if (cfg->host_id != SPI2_HOST && cfg->host_id != SPI3_HOST) {
-        cfg->host_id = ESP_WIZ_TOE_DEF_SPI_HOST;
+        cfg->host_id = WSM_DRIVER_DEF_SPI_HOST;
     }
     if (cfg->clock_hz <= 0) {
-        cfg->clock_hz = ESP_WIZ_TOE_DEF_SPI_CLOCK_HZ;
+        cfg->clock_hz = WSM_DRIVER_DEF_SPI_CLOCK_HZ;
     }
-    cfg->pin_sclk = resolve_pin(cfg->pin_sclk, ESP_WIZ_TOE_DEF_SPI_CLK_PIN);
-    cfg->pin_cs = resolve_pin(cfg->pin_cs, ESP_WIZ_TOE_DEF_SPI_CS_PIN);
-    cfg->pin_mosi = resolve_pin(cfg->pin_mosi, ESP_WIZ_TOE_DEF_SPI_MOSI_PIN);
-    cfg->pin_miso = resolve_pin(cfg->pin_miso, ESP_WIZ_TOE_DEF_SPI_MISO_PIN);
-    cfg->pin_int = resolve_pin(cfg->pin_int, ESP_WIZ_TOE_DEF_SPI_INT_PIN);
-    cfg->pin_rst = resolve_pin(cfg->pin_rst, ESP_WIZ_TOE_DEF_SPI_RST_PIN);
-    cfg->pin_io2 = resolve_pin(cfg->pin_io2, ESP_WIZ_TOE_DEF_SPI_IO2_PIN);
-    cfg->pin_io3 = resolve_pin(cfg->pin_io3, ESP_WIZ_TOE_DEF_SPI_IO3_PIN);
+    cfg->pin_sclk = resolve_pin(cfg->pin_sclk, WSM_DRIVER_DEF_SPI_CLK_PIN);
+    cfg->pin_cs = resolve_pin(cfg->pin_cs, WSM_DRIVER_DEF_SPI_CS_PIN);
+    cfg->pin_mosi = resolve_pin(cfg->pin_mosi, WSM_DRIVER_DEF_SPI_MOSI_PIN);
+    cfg->pin_miso = resolve_pin(cfg->pin_miso, WSM_DRIVER_DEF_SPI_MISO_PIN);
+    cfg->pin_int = resolve_pin(cfg->pin_int, WSM_DRIVER_DEF_SPI_INT_PIN);
+    cfg->pin_rst = resolve_pin(cfg->pin_rst, WSM_DRIVER_DEF_SPI_RST_PIN);
+    cfg->pin_io2 = resolve_pin(cfg->pin_io2, WSM_DRIVER_DEF_SPI_IO2_PIN);
+    cfg->pin_io3 = resolve_pin(cfg->pin_io3, WSM_DRIVER_DEF_SPI_IO3_PIN);
     if (cfg->lock_timeout_ms == 0) {
-        cfg->lock_timeout_ms = ESP_WIZ_TOE_DEF_SPI_TIMEOUT_MS;
+        cfg->lock_timeout_ms = WSM_DRIVER_DEF_SPI_TIMEOUT_MS;
     }
 }
 
@@ -152,7 +152,7 @@ static TickType_t get_wait_ticks(void)
     return pdMS_TO_TICKS(s_ctx.cfg.lock_timeout_ms);
 }
 
-#if !ESP_WIZ_TOE_USE_QSPI
+#if !WSM_DRIVER_USE_QSPI
 static esp_err_t spi_transfer_locked(const uint8_t *tx, uint8_t *rx, size_t len)
 {
     const TickType_t wait_ticks = get_wait_ticks();
@@ -191,9 +191,9 @@ static esp_err_t spi_transfer_locked(const uint8_t *tx, uint8_t *rx, size_t len)
     (void)xSemaphoreGiveRecursive(s_ctx.lock);
     return ret;
 }
-#endif /* !ESP_WIZ_TOE_USE_QSPI */
+#endif /* !WSM_DRIVER_USE_QSPI */
 
-#if ESP_WIZ_TOE_HAS_IOLIB
+#if WSM_DRIVER_HAS_IOLIB
 static void wizchip_cs_select(void)
 {
     const TickType_t wait_ticks = get_wait_ticks();
@@ -225,7 +225,7 @@ static void wizchip_cs_deselect(void)
     (void)xSemaphoreGiveRecursive(s_ctx.lock);
 }
 
-#if !ESP_WIZ_TOE_USE_QSPI
+#if !WSM_DRIVER_USE_QSPI
 static uint8_t wizchip_spi_read_byte(void)
 {
     const uint8_t tx = 0x00;
@@ -283,9 +283,9 @@ static void wizchip_spi_write_burst_6100(uint8_t *buf, datasize_t len)
     wizchip_spi_write_burst(buf, (uint16_t)len);
 }
 #endif
-#endif /* !ESP_WIZ_TOE_USE_QSPI */
+#endif /* !WSM_DRIVER_USE_QSPI */
 
-#if ESP_WIZ_TOE_USE_QSPI
+#if WSM_DRIVER_USE_QSPI
 /*
  * W6300 QSPI frame: opcode (8 bits, always 1-line) + 16-bit address + dummy
  * clocks + data. The dummy clocks (8 in single mode, 2 in quad mode) are
@@ -317,7 +317,7 @@ static void wizchip_qspi_xfer(uint8_t opcode, uint16_t addr, const uint8_t *tx, 
         .dummy_bits = 0,
     };
 
-#ifdef CONFIG_ESP_WIZ_TOE_QSPI_QUAD
+#ifdef CONFIG_WSM_DRIVER_QSPI_QUAD
     t.base.flags |= SPI_TRANS_MODE_QIO | SPI_TRANS_MULTILINE_ADDR;
 #endif
 
@@ -338,7 +338,7 @@ static void wizchip_qspi_write(uint8_t opcode, uint16_t addr, uint8_t *buf, uint
 {
     wizchip_qspi_xfer(opcode, addr, buf, NULL, len);
 }
-#endif /* ESP_WIZ_TOE_USE_QSPI */
+#endif /* WSM_DRIVER_USE_QSPI */
 
 static void wizchip_critical_enter(void)
 {
@@ -351,7 +351,7 @@ static void wizchip_critical_exit(void)
 }
 #endif
 
-esp_err_t esp_wiz_toe_spi_init(const esp_wiz_toe_spi_config_t *cfg)
+esp_err_t wsm_driver_spi_init(const wsm_driver_spi_config_t *cfg)
 {
     esp_err_t ret = ESP_OK;
 
@@ -387,11 +387,11 @@ esp_err_t esp_wiz_toe_spi_init(const esp_wiz_toe_spi_config_t *cfg)
         .data7_io_num = -1,
         .max_transfer_sz = 2048,
     };
-#if ESP_WIZ_TOE_USE_QSPI
+#if WSM_DRIVER_USE_QSPI
     // A single QSPI burst can span a full socket buffer; cover the largest
     // size selectable via Kconfig (16 KB) plus the frame header.
     buscfg.max_transfer_sz = 16 * 1024 + 8;
-#ifdef CONFIG_ESP_WIZ_TOE_QSPI_QUAD
+#ifdef CONFIG_WSM_DRIVER_QSPI_QUAD
     buscfg.quadwp_io_num = s_ctx.cfg.pin_io2;
     buscfg.quadhd_io_num = s_ctx.cfg.pin_io3;
     buscfg.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_QUAD;
@@ -404,7 +404,7 @@ esp_err_t esp_wiz_toe_spi_init(const esp_wiz_toe_spi_config_t *cfg)
         .clock_speed_hz = s_ctx.cfg.clock_hz,
         .spics_io_num = -1,
         .queue_size = 1,
-#if ESP_WIZ_TOE_USE_QSPI
+#if WSM_DRIVER_USE_QSPI
         // QSPI frames are phased (cmd/addr/dummy/data) -> half-duplex device.
         .flags = SPI_DEVICE_HALFDUPLEX,
 #endif
@@ -450,7 +450,7 @@ err:
     return ret;
 }
 
-esp_err_t esp_wiz_toe_spi_deinit(void)
+esp_err_t wsm_driver_spi_deinit(void)
 {
     if (!s_ctx.initialized) {
         return ESP_OK;
@@ -471,14 +471,14 @@ esp_err_t esp_wiz_toe_spi_deinit(void)
     return ESP_OK;
 }
 
-esp_err_t esp_wiz_toe_spi_register_iolib_callbacks(void)
+esp_err_t wsm_driver_spi_register_iolib_callbacks(void)
 {
     ESP_RETURN_ON_FALSE(s_ctx.initialized, ESP_ERR_INVALID_STATE, TAG, "SPI is not initialized");
 
-#if ESP_WIZ_TOE_HAS_IOLIB
+#if WSM_DRIVER_HAS_IOLIB
     reg_wizchip_cris_cbfunc(wizchip_critical_enter, wizchip_critical_exit);
     reg_wizchip_cs_cbfunc(wizchip_cs_select, wizchip_cs_deselect);
-#if ESP_WIZ_TOE_USE_QSPI
+#if WSM_DRIVER_USE_QSPI
     // WIZCHIP.IF is a union: registering the SPI byte callbacks as well would
     // clobber the QSPI function pointers, so register only the QSPI pair.
     reg_wizchip_qspi_cbfunc(wizchip_qspi_read, wizchip_qspi_write);
@@ -500,7 +500,7 @@ esp_err_t esp_wiz_toe_spi_register_iolib_callbacks(void)
 #endif
 }
 
-esp_err_t esp_wiz_toe_spi_reset(void)
+esp_err_t wsm_driver_spi_reset(void)
 {
     ESP_RETURN_ON_FALSE(s_ctx.initialized, ESP_ERR_INVALID_STATE, TAG, "SPI is not initialized");
 
@@ -509,18 +509,18 @@ esp_err_t esp_wiz_toe_spi_reset(void)
     }
 
     gpio_set_level(s_ctx.cfg.pin_rst, 0);
-    vTaskDelay(ESP_WIZ_TOE_DELAY_TICKS(2));
+    vTaskDelay(WSM_DRIVER_DELAY_TICKS(2));
     gpio_set_level(s_ctx.cfg.pin_rst, 1);
-    vTaskDelay(ESP_WIZ_TOE_DELAY_TICKS(150));
+    vTaskDelay(WSM_DRIVER_DELAY_TICKS(150));
 
     return ESP_OK;
 }
 
-esp_err_t esp_wiz_toe_spi_wizchip_check(void)
+esp_err_t wsm_driver_spi_wizchip_check(void)
 {
     ESP_RETURN_ON_FALSE(s_ctx.initialized, ESP_ERR_INVALID_STATE, TAG, "SPI is not initialized");
 
-#if ESP_WIZ_TOE_HAS_IOLIB
+#if WSM_DRIVER_HAS_IOLIB
 #if (_WIZCHIP_ == W5100S)
     const uint8_t ver = getVER();
     if (ver != 0x51) {
@@ -567,12 +567,12 @@ esp_err_t esp_wiz_toe_spi_wizchip_check(void)
 #endif
 }
 
-esp_err_t esp_wiz_toe_spi_link_is_up(bool *is_up)
+esp_err_t wsm_driver_spi_link_is_up(bool *is_up)
 {
     ESP_RETURN_ON_FALSE(is_up != NULL, ESP_ERR_INVALID_ARG, TAG, "is_up is NULL");
     ESP_RETURN_ON_FALSE(s_ctx.initialized, ESP_ERR_INVALID_STATE, TAG, "SPI is not initialized");
 
-#if ESP_WIZ_TOE_HAS_IOLIB
+#if WSM_DRIVER_HAS_IOLIB
     uint8_t link_state = 0;
     if (ctlwizchip(CW_GET_PHYLINK, (void *)&link_state) != 0) {
         *is_up = false;

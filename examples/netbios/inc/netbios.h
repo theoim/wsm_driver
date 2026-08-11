@@ -8,7 +8,7 @@
  * the component's BSD socket vtable (net_sock_ops_t) and the TOE/LwIP choice is
  * made by the LINKER, not by the source:
  *   - net_eth_ops  is the plain lwip_* entry points. Under
- *     `Component config -> WIZnet TOE Component -> Network backend`
+ *     `Component config -> WIZnet WSM Driver -> Network backend`
  *       TOE (hardware TCP/IP)          -> --wrap redirects them to the chip's
  *                                         hardware sockets (__wrap_lwip_*)
  *       esp_eth MACRAW + software LwIP -> they are the software LwIP (lwip_*)

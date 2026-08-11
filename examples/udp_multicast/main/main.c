@@ -24,7 +24,7 @@
  * Wi-Fi is optional: leave WIFI_SSID empty in net_config.h to run Ethernet-only.
  *
  * Works with W5500 or W6300 — select the chip in menuconfig:
- *   Component config -> WIZnet TOE Component -> WIZnet chip
+ *   Component config -> WIZnet WSM Driver -> WIZnet chip
  */
 #include "sdkconfig.h"
 #include "wizchip_conf.h"       /* wiz_NetInfo, NETINFO_STATIC */
@@ -39,13 +39,13 @@
 /* Ethernet reaches the WIZnet hardware sockets only when the wrap is on. With
  * the esp_eth backend the same vtable is software LwIP, and the chip-level join
  * would have no socket to act on. */
-#if CONFIG_ESP_WIZ_TOE_SOCKET_WRAP
+#if CONFIG_WSM_DRIVER_SOCKET_WRAP
 #define ETH_JOIN  mcast_join_toe
 #else
 #define ETH_JOIN  mcast_join_bsd
 #endif
 
-/* Network identity — esp_wiz_toe style (wiz_NetInfo). Applied to the WIZnet
+/* Network identity — wsm_driver style (wiz_NetInfo). Applied to the WIZnet
  * chip's hardware TCP/IP stack by wiznet_net_init() -> wizchip_setnetinfo(). */
 static const wiz_NetInfo g_net_info = {
     .mac = NET_MAC_ADDR,

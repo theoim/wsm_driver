@@ -8,7 +8,7 @@ idf_component_register(
         "."
         "../inc"
     REQUIRES
-        esp_wiz_toe
+        wsm_driver
         esp_timer
 )
 
@@ -24,7 +24,7 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
 # holds socket.h too, so the quote-form include resolves to lwIP's instead --
 # leaving PPPoE.c looking at the 3-argument POSIX socket() ("too many arguments
 # to function 'socket'"). -iquote is searched before every -I dir for
-# quote-form includes, which fixes the resolution; the esp_wiz_toe component
+# quote-form includes, which fixes the resolution; the wsm_driver component
 # applies the same trick to wiznet_toe.c for exactly this reason.
 set(WIZNET_IOLIB_ETHERNET
     "${CMAKE_CURRENT_LIST_DIR}/../../../third_party/ioLibrary_Driver/Ethernet")

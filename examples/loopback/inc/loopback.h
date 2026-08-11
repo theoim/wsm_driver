@@ -4,10 +4,10 @@
  * Backend-neutral loopback (echo) engine, shared by the Ethernet (W5500) and
  * Wi-Fi paths. The socket entry points are injected via a vtable so the exact
  * same echo logic drives either stack:
- *   - Ethernet: plain lwIP BSD ops (lwip_socket/...). With ESP_WIZ_TOE_SOCKET_WRAP=1
+ *   - Ethernet: plain lwIP BSD ops (lwip_socket/...). With WSM_DRIVER_SOCKET_WRAP=1
  *     these are redirected to the W5500 hardware sockets by -Wl,--wrap
  *     (wiztoe_wrap.c); with =0 they are the software LwIP over esp_eth.
- *   - Wi-Fi: with ESP_WIZ_TOE_SOCKET_WRAP=1 the __real_lwip_* symbols (bypassing
+ *   - Wi-Fi: with WSM_DRIVER_SOCKET_WRAP=1 the __real_lwip_* symbols (bypassing
  *     --wrap) so the traffic goes to the REAL software LwIP; with =0 the same
  *     lwip_* as Ethernet (both share one stack). See wifi_loopback.c.
  *
@@ -43,14 +43,14 @@ typedef struct {
 /*
  * Standard lwIP BSD socket vtable, used by the Ethernet loopback. These plain
  * lwip_* entry points are redirected to the W5500 hardware sockets by -Wl,--wrap
- * with ESP_WIZ_TOE_SOCKET_WRAP=1, and are software LwIP over esp_eth with =0. (The
+ * with WSM_DRIVER_SOCKET_WRAP=1, and are software LwIP over esp_eth with =0. (The
  * Wi-Fi loopback uses wifi_loopback_ops instead — see wifi_backend.h.)
  */
 extern const loopback_ops_t loopback_lwip_ops;
 
 /*
  * Wi-Fi socket vtable for loopback_start() (defined in wifi_loopback.c). With
- * ESP_WIZ_TOE_SOCKET_WRAP=1 this is the __real_lwip_* set that bypasses the W5500
+ * WSM_DRIVER_SOCKET_WRAP=1 this is the __real_lwip_* set that bypasses the W5500
  * --wrap so Wi-Fi traffic reaches the real software LwIP stack.
  */
 extern const loopback_ops_t wifi_loopback_ops;

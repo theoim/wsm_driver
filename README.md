@@ -1,4 +1,4 @@
-# esp_wiz_toe
+# wsm_driver
 
 ESP-IDF component that provides a W5500 SPI port layer for direct WIZnet ioLibrary usage.
 
@@ -13,6 +13,19 @@ It only handles:
 - PHY link state query
 
 Application code uses ioLibrary APIs directly (`wizchip_init`, `socket`, `connect`, `send`, `recv`, `sendto`, `recvfrom`, DHCP/DNS APIs).
+
+## Requirements
+
+- **ESP-IDF v6.0 or later.** This is a hard minimum, not a recommendation — the
+  component declares `idf >= 6.0.1` in `idf_component.yml` and the public header
+  fails the build with an `#error` on anything older. Reasons:
+  - the esp_eth MAC callbacks used by the ETH backend (`add_mac_filter`,
+    `rm_mac_filter`, `set_all_multicast`) are part of `esp_eth_mac_t` from v5.5 on;
+  - the TLS examples target mbedTLS 4.0, which ships with v6.0 and removed the
+    static-RSA ciphersuites, `mbedtls_ssl_conf_rng()` and the RNG arguments of
+    `mbedtls_pk_parse_key()` used by older code.
+
+  Building on v5.x is not supported and will not be patched around.
 
 ## Supported ESP-IDF targets
 
@@ -34,13 +47,13 @@ ESP32-S3 SPI master in half-duplex mode.
 - **Single mode** (default): uses the same 4-wire wiring as W5500
   (MOSI=IO0, MISO=IO1, SCLK, CS).
 - **Quad mode**: requires two extra data lines (IO2/IO3) wired to the chip and
-  selected via `Component config -> WIZnet TOE Component -> W6300 QSPI mode`.
+  selected via `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`.
 
-Select the chip in menuconfig: `Component config -> WIZnet TOE Component -> WIZnet chip -> W6300`.
+Select the chip in menuconfig: `Component config -> WIZnet WSM Driver -> WIZnet chip -> W6300`.
 
 ## Network backend
 
-`Component config -> WIZnet TOE Component -> Network backend` picks who owns the
+`Component config -> WIZnet WSM Driver -> Network backend` picks who owns the
 TCP/IP stack. Both options work with either chip.
 
 - **TOE (hardware TCP/IP)** — the chip runs the stack (ioLibrary). Apps either
@@ -69,36 +82,36 @@ the W5500's single `PHYCFGR`, whose speed/duplex bits have the opposite polarity
 
 ## Public API
 
-Header: `include/esp_wiz_toe.h`
+Header: `include/wsm_driver.h`
 
-- `esp_wiz_toe_spi_init`
-- `esp_wiz_toe_spi_deinit`
-- `esp_wiz_toe_spi_register_iolib_callbacks`
-- `esp_wiz_toe_spi_reset`
-- `esp_wiz_toe_spi_wizchip_check`
-- `esp_wiz_toe_spi_link_is_up`
+- `wsm_driver_spi_init`
+- `wsm_driver_spi_deinit`
+- `wsm_driver_spi_register_iolib_callbacks`
+- `wsm_driver_spi_reset`
+- `wsm_driver_spi_wizchip_check`
+- `wsm_driver_spi_link_is_up`
 
 ## Quick start (clone & build)
 
 The repository root is a component; the buildable projects are the examples.
 
 ```bash
-git clone --recursive https://github.com/Wiznet/esp_wiz_toe.git
-cd esp_wiz_toe
-idf.py -C examples/tcp_client build      # -C selects the project directory
+git clone --recursive https://github.com/Wiznet/wsm_driver.git
+cd wsm_driver
+idf.py -C examples/loopback build        # -C selects the project directory
 ```
 
-For VSCode, open `esp_wiz_toe.code-workspace` (File -> Open Workspace from
+For VSCode, open `wsm_driver.code-workspace` (File -> Open Workspace from
 File). The workspace registers each example as a folder, so the ESP-IDF
 extension works as usual — run `ESP-IDF: Pick a Workspace Folder`, choose an
 example, then use the normal build/flash/monitor buttons.
 
 ## Usage flow
 
-1. Fill `esp_wiz_toe_spi_config_t`
-2. Call `esp_wiz_toe_spi_init()`
-3. Call `esp_wiz_toe_spi_register_iolib_callbacks()`
-4. Call `esp_wiz_toe_spi_reset()`
+1. Fill `wsm_driver_spi_config_t`
+2. Call `wsm_driver_spi_init()`
+3. Call `wsm_driver_spi_register_iolib_callbacks()`
+4. Call `wsm_driver_spi_reset()`
 5. Call ioLibrary init (`wizchip_init`) and network setup (`wizchip_setnetinfo`)
 6. Use ioLibrary socket APIs directly
 
@@ -120,8 +133,6 @@ each works with W5500 or W6300 — switch the chip in menuconfig — except
 `pppoe`, which is W5500-only):
 
 - `examples/loopback` — TCP server loopback (TCP client / UDP via defines)
-- `examples/tcp_client` — TCP loopback client
-- `examples/tcp_server` — TCP loopback server
 - `examples/tcp_server_multi_socket` — same port served on every hardware socket
 - `examples/udp` — UDP echo server or client (menuconfig choice)
 - `examples/udp_multicast` — UDP multicast receiver (224.0.0.5:30000)
@@ -137,6 +148,8 @@ each works with W5500 or W6300 — switch the chip in menuconfig — except
 - `examples/upnp` — IGD discovery + port mapping via serial menu
 - `examples/tcp_client_over_ssl` — TLS client over the WIZnet socket using
   mbedTLS (cert verification disabled for the demo)
+- `examples/tcp_server_over_ssl` — TLS echo server over the WIZnet socket using
+  mbedTLS (ECDHE-RSA suites; see the example README for the mbedTLS 4.0 notes)
 - `examples/w6300_loopback` — W6300 reference (chip pinned to W6300)
 
 Not ported from WIZnet-PICO-C: `can` (RP2040 PIO-specific) and `ftp` (FTP
@@ -146,23 +159,25 @@ Each example is an independent ESP-IDF project that uses ioLibrary APIs
 directly after SPI port-layer initialization. Build from the example folder:
 
 ```bash
-cd examples/tcp_client
+cd examples/loopback
 idf.py build
 ```
 
 Chip, SPI host/clock/pin defaults and per-socket RX/TX buffer size can be
 changed in menuconfig:
 
-- `Component config -> WIZnet TOE Component -> WIZnet chip -> W5500`
-- `Component config -> WIZnet TOE Component -> SPI host (2=SPI2, 3=SPI3)`
-- `Component config -> WIZnet TOE Component -> SPI clock (Hz)`
-- `Component config -> WIZnet TOE Component -> GPIO: MISO/MOSI/SCLK/CS/RESET/INT`
-- `Component config -> WIZnet TOE Component -> Per-socket RX/TX buffer size (KB)`
+- `Component config -> WIZnet WSM Driver -> WIZnet chip -> W5500`
+- `Component config -> WIZnet WSM Driver -> SPI host (2=SPI2, 3=SPI3)`
+- `Component config -> WIZnet WSM Driver -> SPI clock (Hz)`
+- `Component config -> WIZnet WSM Driver -> GPIO: MISO/MOSI/SCLK/CS/RESET/INT`
+- `Component config -> WIZnet WSM Driver -> Per-socket RX/TX buffer size (KB)`
 
-Example-specific endpoint values are kept in each example source for simplicity:
+Example-specific endpoint values (static IP, ports, peer address) are kept in the
+example sources for simplicity, not in menuconfig:
 
-- `examples/tcp_client/main/main.c` (`EXAMPLE_SERVER_IP`, `EXAMPLE_SERVER_PORT`)
-- `examples/tcp_server/main/main.c` (`EXAMPLE_LISTEN_PORT`)
+- `examples/<name>/inc/net_config.h` — every example except `w6300_loopback`,
+  e.g. `examples/loopback/inc/net_config.h` (`LOOPBACK_PORT`,
+  `LOOPBACK_TARGET_IP`, `LOOPBACK_TARGET_PORT`)
 - `examples/w6300_loopback/main/main.c` (`EXAMPLE_TCP_LISTEN_PORT`, `EXAMPLE_UDP_LISTEN_PORT`)
 
 
@@ -173,8 +188,8 @@ You can add this component to a new ESP-IDF project from the ESP Component Regis
 ### 1. Create a new ESP-IDF project
 
 ```bash
-idf.py create-project test_esp_wiz_toe_production
-cd test_esp_wiz_toe_production
+idf.py create-project test_wsm_driver_production
+cd test_wsm_driver_production
 ```
 ### 2. Set ESP-IDF target
 
@@ -186,14 +201,14 @@ Ex) idf.py set-target esp32s3
 ### 3. Add the component dependency
 
 ```bash
-idf.py add-dependency "wiznet/esp_wiz_toe=={version}"
-Ex) idf.py add-dependency "wiznet/esp_wiz_toe==0.1.0-alpha.5"
+idf.py add-dependency "wiznet/wsm_driver=={version}"
+Ex) idf.py add-dependency "wiznet/wsm_driver==1.0.0"
 ```
 This command creates main/idf_component.yml automatically and adds the dependency.
 
 After the dependency is resolved during build, the component will be downloaded under:
 
-`managed_components/wiznet__esp_wiz_toe/`
+`managed_components/wiznet__wsm_driver/`
 
 ### 4. Add example code to your project
 
@@ -201,13 +216,13 @@ Copy the example application code from one of the component examples into your p
 
 For example, you can refer to:
 
-`managed_components/wiznet__esp_wiz_toe/examples/tcp_client/main/main.c`
-`managed_components/wiznet__esp_wiz_toe/examples/tcp_server/main/main.c`
-`managed_components/wiznet__esp_wiz_toe/examples/w6300_loopback/main/main.c`
+`managed_components/wiznet__wsm_driver/examples/loopback/main/main.c`
+`managed_components/wiznet__wsm_driver/examples/tcp_server_multi_socket/main/main.c`
+`managed_components/wiznet__wsm_driver/examples/w6300_loopback/main/main.c`
 
 Then paste or adapt the code into your project source file, for example:
 
-`main/test_esp_wiz_toe_production.c`
+`main/test_wsm_driver_production.c`
 
 ### 5. Build & Flash
 ```bash
@@ -225,5 +240,5 @@ idf.py -p COM38 flash monitor
 - `ioLibrary_Driver` is a third-party dependency with its own license terms.
 
 
-[link-esp_idf_terminal]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/esp_idf_terminal.png
-[link-hercules]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/hercules.png
+[link-esp_idf_terminal]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/esp_idf_terminal.png
+[link-hercules]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/hercules.png

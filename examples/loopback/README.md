@@ -29,13 +29,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -158,19 +158,19 @@ After connecting, send any data from Hercules. The device echoes the same data b
 ## Appendix
 
 - **TCP client / UDP variants:** Set `LOOPBACK_MODE` to `1` or `2` to test the other loopback modes. In TCP client mode both interfaces connect out to a PC TCP server at `LOOPBACK_TARGET_IP:LOOPBACK_TARGET_PORT` (`192.168.11.100:5000`) and echo whatever it sends; in UDP mode open a Hercules UDP socket to the device IP on port `5000` (Ethernet) or `5001` (Wi-Fi).
-- **Two interfaces, one engine:** `main.c` calls `loopback_start()` twice with identical arguments except the label, socket vtable, port and readiness predicate. Ethernet uses `loopback_lwip_ops` (plain `lwip_*`, which `-Wl,--wrap` redirects to the chip's hardware sockets when `CONFIG_ESP_WIZ_TOE_SOCKET_WRAP` is on); Wi-Fi uses `wifi_loopback_ops`, which binds `__real_lwip_*` so it always reaches the real software LwIP. The echo logic in `src/loopback.c` contains no `#if` for the backend.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **Two interfaces, one engine:** `main.c` calls `loopback_start()` twice with identical arguments except the label, socket vtable, port and readiness predicate. Ethernet uses `loopback_lwip_ops` (plain `lwip_*`, which `-Wl,--wrap` redirects to the chip's hardware sockets when `CONFIG_WSM_DRIVER_SOCKET_WRAP` is on); Wi-Fi uses `wifi_loopback_ops`, which binds `__real_lwip_*` so it always reaches the real software LwIP. The echo logic in `src/loopback.c` contains no `#if` for the backend.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-hercules]: https://www.hw-group.com/software/hercules-setup-utility
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/run_socket_open.png
-[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/run_hercules.png
-[link-run_loopback]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/loopback/run_loopback.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/run_socket_open.png
+[link-run_hercules]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/run_hercules.png
+[link-run_loopback]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/loopback/run_loopback.png

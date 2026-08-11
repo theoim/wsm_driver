@@ -6,14 +6,14 @@
  * multi_socket_start(); only the vtable differs, and this file owns the Wi-Fi
  * one.
  *
- * This is the ONE place aware of the WIZnet --wrap. In ESP_WIZ_TOE_SOCKET_WRAP=1
+ * This is the ONE place aware of the WIZnet --wrap. In WSM_DRIVER_SOCKET_WRAP=1
  * the plain lwip_* symbols are redirected to the chip's hardware sockets, so
  * Wi-Fi must bind to the linker's __real_lwip_* (the un-wrapped originals) to
  * reach the REAL software LwIP stack that the Wi-Fi netif is attached to. The
  * TOE sockets and these real LwIP fds never cross: each call site fixes which
  * namespace an fd belongs to.
  *
- * In ESP_WIZ_TOE_SOCKET_WRAP=0 there is no --wrap; Wi-Fi and Ethernet share one
+ * In WSM_DRIVER_SOCKET_WRAP=0 there is no --wrap; Wi-Fi and Ethernet share one
  * LwIP stack, so the vtable is just the plain lwip_* (identical to the Ethernet
  * ops). The two servers use different port bases (see net_config.h) to avoid a
  * bind clash on that shared stack.
@@ -22,10 +22,10 @@
 
 #include "multi_socket.h"   /* multi_socket_ops_t + wifi_multi_socket_ops decl */
 
-#if defined(ESP_WIZ_TOE_SOCKET_WRAP) && (ESP_WIZ_TOE_SOCKET_WRAP)
+#if defined(WSM_DRIVER_SOCKET_WRAP) && (WSM_DRIVER_SOCKET_WRAP)
 /* Un-wrapped LwIP entry points provided by the linker because these symbols are
- * listed in --wrap (see the esp_wiz_toe component CMakeLists, which also defines
- * ESP_WIZ_TOE_SOCKET_WRAP PUBLIC). Calling __real_* bypasses the WIZnet redirect
+ * listed in --wrap (see the wsm_driver component CMakeLists, which also defines
+ * WSM_DRIVER_SOCKET_WRAP PUBLIC). Calling __real_* bypasses the WIZnet redirect
  * and hits the software LwIP stack. */
 extern int     __real_lwip_socket(int domain, int type, int protocol);
 extern int     __real_lwip_bind(int s, const struct sockaddr *name, socklen_t namelen);

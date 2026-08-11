@@ -28,13 +28,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -150,19 +150,19 @@ No separate PC tool is needed — the result is verified entirely in the serial 
 
 - **SNTP failed:** If `SNTP failed after 3 attempts` is printed, the device could not reach the server within `SNTP_TIMEOUT_MS` per attempt. Check the cable and that `NET_GATEWAY` provides a valid internet route (for the `[wifi]` line, that your AP does).
 - **Timezone:** `SNTP_TZ_OFFSET_MIN` is a plain minute offset applied to the UTC the server returns. Adjust it for your region.
-- **How one client drives two interfaces:** the query in `src/sntp_client.c` calls BSD sockets through a vtable. For Ethernet that vtable is the plain `lwip_*` set, which the `esp_wiz_toe` component redirects to the chip's hardware sockets at link time (`-Wl,--wrap`, `CONFIG_ESP_WIZ_TOE_SOCKET_WRAP`); for Wi-Fi it is the un-wrapped `__real_lwip_*` set in `src/wifi_sntp.c`, which reaches the software LwIP stack. The application code is identical for both.
+- **How one client drives two interfaces:** the query in `src/sntp_client.c` calls BSD sockets through a vtable. For Ethernet that vtable is the plain `lwip_*` set, which the `wsm_driver` component redirects to the chip's hardware sockets at link time (`-Wl,--wrap`, `CONFIG_WSM_DRIVER_SOCKET_WRAP`); for Wi-Fi it is the un-wrapped `__real_lwip_*` set in `src/wifi_sntp.c`, which reaches the software LwIP stack. The application code is identical for both.
 - **Why not ioLibrary's `SNTP_run()`:** that implementation drives a hardware socket number directly, so it never passes through the BSD socket layer the wrap intercepts and cannot run on Wi-Fi at all. The NTP exchange is one 48-byte datagram each way, so this example does it over plain BSD UDP instead. It also keeps ioLibrary's `sntp.h` out of the include path, where it collides with lwIP's header of the same name.
 - **Ethernet only:** remove the `sntp_client_start("wifi", ...)` call (and `wifi_net_init`) from `main/main.c`.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/build_log.png
-[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/run_socket_open.png
-[link-run_time]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/sntp/run_time.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/build_log.png
+[link-run_socket_open]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/run_socket_open.png
+[link-run_time]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/sntp/run_time.png

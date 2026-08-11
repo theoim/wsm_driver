@@ -28,13 +28,13 @@ idf.py menuconfig
 Select **Component config**.
 ![][link-config_main]
 
-Select **WIZnet TOE Component** under Component config.
+Select **WIZnet WSM Driver** under Component config.
 ![][link-config_component]
 
 Choose the WIZnet chip, and check the per-socket buffer size. SPI host, clock, and pins follow the selected chip automatically. In this example, SPI2 of the ESP32-S3 is used at 33 MHz.
 ![][link-config_wiz_toe]
 
-> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet TOE Component -> WIZnet chip` if needed.
+> This example ships with **W6300** selected by default (`sdkconfig.defaults`). Switch to W5500 under `Component config -> WIZnet WSM Driver -> WIZnet chip` if needed.
 
 **W5500 wiring (standard SPI)**
 
@@ -131,17 +131,17 @@ ping 192.168.11.2
 ## Appendix
 
 - **Link poll behavior:** While the cable is disconnected the device prints the raw link status (`0`) on each 500 ms poll. It retries up to 10 times before declaring `Link failed of Internal PHY.`; reconnecting the cable and resetting the board restarts the check.
-- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet TOE Component -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
+- **W6300 QSPI mode:** Quad mode (4-bit) requires the extra D2/D3 lines wired and selected in `Component config -> WIZnet WSM Driver -> W6300 QSPI mode`. Single mode uses the same 4-wire wiring as W5500.
 
 <!-- Link -->
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/config_wiz_toe.png
+[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/hardware.png
+[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/config_main.png
+[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/config_component.png
+[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/build_log.png
-[link-run_link_ok]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/run_link_ok.png
-[link-run_link_fail]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/run_link_fail.png
-[link-run_ping]: https://raw.githubusercontent.com/Wiznet/esp_wiz_toe/main/static/image/network_install/run_ping.png
+[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/build_log.png
+[link-run_link_ok]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/run_link_ok.png
+[link-run_link_fail]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/run_link_fail.png
+[link-run_ping]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/network_install/run_ping.png

@@ -6,11 +6,11 @@
  * the W6300 counterpart of esp_eth_mac_w5500.h.
  *
  * The chip's own hardware TCP/IP (TOE) is NOT used in this path; select
- * CONFIG_ESP_WIZ_TOE_BACKEND_TOE for that.
+ * CONFIG_WSM_DRIVER_BACKEND_TOE for that.
  *
  * The API mirrors the W5500 driver so net_backend_eth.c differs only in which
  * *_new_* function it calls. The QSPI framing (opcode + 16-bit address + dummy
- * + data, single or quad per CONFIG_ESP_WIZ_TOE_QSPI_*) is handled internally,
+ * + data, single or quad per CONFIG_WSM_DRIVER_QSPI_*) is handled internally,
  * so the SPI device MUST be created half-duplex — see the note on spi_devcfg.
  */
 

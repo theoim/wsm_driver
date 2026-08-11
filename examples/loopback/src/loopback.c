@@ -29,7 +29,7 @@
 
 static const char *TAG = "loopback";
 
-/* Standard lwIP BSD socket vtable (Ethernet). With ESP_WIZ_TOE_SOCKET_WRAP=1 these
+/* Standard lwIP BSD socket vtable (Ethernet). With WSM_DRIVER_SOCKET_WRAP=1 these
  * lwip_* symbols are --wrap-redirected to the W5500; with =0 they are software
  * LwIP over esp_eth. Correct either way, so no #if here. Exposed so app_main
  * references it the same way as the

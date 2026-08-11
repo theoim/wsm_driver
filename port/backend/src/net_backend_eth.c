@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: CC0-1.0
  *
- * ETH backend (CONFIG_ESP_WIZ_TOE_BACKEND_ETH) implementation of the
+ * ETH backend (CONFIG_WSM_DRIVER_BACKEND_ETH) implementation of the
  * backend-neutral harness (net_backend.h): the WIZnet chip is a SPI Ethernet MAC
  * via ESP-IDF esp_eth (MACRAW), and the LwIP software stack runs on the ESP32-S3.
  *
@@ -9,10 +9,10 @@
  * differ, and both differences are isolated in this file:
  *   - W5500: standard full-duplex SPI, 3-byte VDM frame  -> esp_eth_*_w5500
  *   - W6300: half-duplex QSPI (opcode + address + dummy + data), 1-bit or 4-bit
- *            per CONFIG_ESP_WIZ_TOE_QSPI_*                -> esp_eth_*_w6300
+ *            per CONFIG_WSM_DRIVER_QSPI_*                -> esp_eth_*_w6300
  *
- * Config conventions follow esp_wiz_toe:
- *   - pins / SPI -> component Kconfig (CONFIG_ESP_WIZ_TOE_*).
+ * Config conventions follow wsm_driver:
+ *   - pins / SPI -> component Kconfig (CONFIG_WSM_DRIVER_*).
  *   - network    -> the caller's wiz_NetInfo (byte arrays), mirrored onto the
  *                   esp_netif as a static IPv4 identity + MAC + DNS.
  */
@@ -27,7 +27,7 @@
 #include "esp_netif.h"
 #include "esp_eth.h"
 #include "esp_eth_driver.h"
-#if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300)
+#if defined(CONFIG_WSM_DRIVER_CHIP_W6300)
 #include "esp_eth_mac_w6300.h"
 #include "esp_eth_phy_w6300.h"
 #else
@@ -39,7 +39,7 @@
 
 #include "net_backend.h"   /* wiznet_net_init(const wiz_NetInfo*), wiz_NetInfo */
 
-#if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300)
+#if defined(CONFIG_WSM_DRIVER_CHIP_W6300)
 static const char *TAG = "w6300_eth";
 #else
 static const char *TAG = "w5500_eth";
@@ -110,11 +110,11 @@ void wiznet_net_init(const wiz_NetInfo *net_info)
     esp_netif_config_t netif_cfg = ESP_NETIF_DEFAULT_ETH();
     s_eth_netif = esp_netif_new(&netif_cfg);
 
-    /* 3) SPI bus + device — wiring from Kconfig (esp_wiz_toe convention). */
+    /* 3) SPI bus + device — wiring from Kconfig (wsm_driver convention). */
     spi_bus_config_t buscfg = {
-        .mosi_io_num = CONFIG_ESP_WIZ_TOE_PIN_MOSI,
-        .miso_io_num = CONFIG_ESP_WIZ_TOE_PIN_MISO,
-        .sclk_io_num = CONFIG_ESP_WIZ_TOE_PIN_SCLK,
+        .mosi_io_num = CONFIG_WSM_DRIVER_PIN_MOSI,
+        .miso_io_num = CONFIG_WSM_DRIVER_PIN_MISO,
+        .sclk_io_num = CONFIG_WSM_DRIVER_PIN_SCLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         /* Must be -1, not left zero-initialised. spicommon_bus_initialize_io()
@@ -129,24 +129,24 @@ void wiznet_net_init(const wiz_NetInfo *net_info)
         .data6_io_num = -1,
         .data7_io_num = -1,
     };
-#if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300) && defined(CONFIG_ESP_WIZ_TOE_QSPI_QUAD)
+#if defined(CONFIG_WSM_DRIVER_CHIP_W6300) && defined(CONFIG_WSM_DRIVER_QSPI_QUAD)
     /* Quad mode needs the two extra data lines declared on the bus. */
-    buscfg.quadwp_io_num = CONFIG_ESP_WIZ_TOE_PIN_IO2;   /* D2 */
-    buscfg.quadhd_io_num = CONFIG_ESP_WIZ_TOE_PIN_IO3;   /* D3 */
+    buscfg.quadwp_io_num = CONFIG_WSM_DRIVER_PIN_IO2;   /* D2 */
+    buscfg.quadhd_io_num = CONFIG_WSM_DRIVER_PIN_IO3;   /* D3 */
     buscfg.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_QUAD;
 #endif
-#if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300)
+#if defined(CONFIG_WSM_DRIVER_CHIP_W6300)
     /* one MACRAW frame + the QSPI frame header */
     buscfg.max_transfer_sz = 2048;
 #endif
-    ESP_ERROR_CHECK(spi_bus_initialize(CONFIG_ESP_WIZ_TOE_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
+    ESP_ERROR_CHECK(spi_bus_initialize(CONFIG_WSM_DRIVER_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
     spi_device_interface_config_t devcfg = {
         .mode = 0,                                       /* both chips = SPI mode 0 */
-        .clock_speed_hz = CONFIG_ESP_WIZ_TOE_SPI_CLOCK_HZ,   /* already in Hz */
+        .clock_speed_hz = CONFIG_WSM_DRIVER_SPI_CLOCK_HZ,   /* already in Hz */
         .queue_size = 20,
-        .spics_io_num = CONFIG_ESP_WIZ_TOE_PIN_CS,
-#if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300)
+        .spics_io_num = CONFIG_WSM_DRIVER_PIN_CS,
+#if defined(CONFIG_WSM_DRIVER_CHIP_W6300)
         /* The W6300 QSPI frame is phased (opcode / address / dummy / data), which
          * the SPI master can only emit half-duplex. The MAC rejects the device
          * outright if this flag is missing. command_bits / address_bits are left
@@ -158,18 +158,18 @@ void wiznet_net_init(const wiz_NetInfo *net_info)
     /* 4) MAC + PHY for the selected chip (interrupt-driven; INT pin from Kconfig). */
     eth_mac_config_t mac_cfg = ETH_MAC_DEFAULT_CONFIG();
     eth_phy_config_t phy_cfg = ETH_PHY_DEFAULT_CONFIG();
-    phy_cfg.reset_gpio_num = CONFIG_ESP_WIZ_TOE_PIN_RST;
+    phy_cfg.reset_gpio_num = CONFIG_WSM_DRIVER_PIN_RST;
 
-#if defined(CONFIG_ESP_WIZ_TOE_CHIP_W6300)
-    eth_w6300_config_t chip_cfg = ETH_W6300_DEFAULT_CONFIG(CONFIG_ESP_WIZ_TOE_SPI_HOST, &devcfg);
-    chip_cfg.int_gpio_num   = CONFIG_ESP_WIZ_TOE_PIN_INT;
+#if defined(CONFIG_WSM_DRIVER_CHIP_W6300)
+    eth_w6300_config_t chip_cfg = ETH_W6300_DEFAULT_CONFIG(CONFIG_WSM_DRIVER_SPI_HOST, &devcfg);
+    chip_cfg.int_gpio_num   = CONFIG_WSM_DRIVER_PIN_INT;
     chip_cfg.poll_period_ms = 0;
 
     esp_eth_mac_t *mac = esp_eth_mac_new_w6300(&chip_cfg, &mac_cfg);
     esp_eth_phy_t *phy = esp_eth_phy_new_w6300(&phy_cfg);
 #else
-    eth_w5500_config_t chip_cfg = ETH_W5500_DEFAULT_CONFIG(CONFIG_ESP_WIZ_TOE_SPI_HOST, &devcfg);
-    chip_cfg.int_gpio_num   = CONFIG_ESP_WIZ_TOE_PIN_INT;
+    eth_w5500_config_t chip_cfg = ETH_W5500_DEFAULT_CONFIG(CONFIG_WSM_DRIVER_SPI_HOST, &devcfg);
+    chip_cfg.int_gpio_num   = CONFIG_WSM_DRIVER_PIN_INT;
     chip_cfg.poll_period_ms = 0;
 
     esp_eth_mac_t *mac = esp_eth_mac_new_w5500(&chip_cfg, &mac_cfg);
