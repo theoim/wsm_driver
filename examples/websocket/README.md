@@ -205,6 +205,27 @@ I (17121) ws_server: [eth] received 6 binary bytes
 
 Reloading the page closes the connection and opens a new one. That is worth doing a few times: it is the path that re-arms the listener on the TOE.
 
+### Over Wi-Fi as well
+
+Filling in `WIFI_SSID` starts a second server on the Wi-Fi interface, and the two run side by side. It comes up on its own schedule, once the station holds a DHCP lease:
+
+```
+I (90642) esp_netif_handlers: sta ip: 192.168.11.8, mask: 255.255.255.0, gw: 192.168.11.1
+I (90643) wifi: got IP 192.168.11.8
+I (90735) ws_server: [wifi] WebSocket server on port 81
+```
+
+Open that address **with the port**: `http://192.168.11.8:81`. Plain `http://192.168.11.8` will not answer, because a browser sends it to port 80 and only the Ethernet server listens there. The split is deliberate — see `WIFI_WS_PORT` in [Step 3](#step-3-setup-websocket-example).
+
+Leave the Ethernet tab open while you do it. Both stay up, and the log prefix says which one is talking:
+
+```
+I (106946) ws_server: [eth] serving the page
+I (107041) ws_server: [eth] connection open
+```
+
+That is the whole point of the example: identical protocol code driving WIZnet hardware sockets and software LwIP at the same time, differing only in the socket vtable each connection carries.
+
 ## Troubleshooting
 
 ### `CID mismatch: 0x0000` at boot
@@ -226,6 +247,22 @@ The page arrived over HTTP but the WebSocket did not open. Check the serial log 
 ### Nothing at all after `WebSocket server on port 80`
 
 The device is listening but unreachable. Confirm the PC is on the same subnet as `NET_IP_ADDR` and that the RJ45 link LEDs are on.
+
+### The Wi-Fi address refuses the connection
+
+Two different causes, and the serial log tells them apart.
+
+If `[wifi] WebSocket server on port 81` has been printed, the address is right but the port is missing: use `http://<sta-ip>:81`, not `http://<sta-ip>`. Ethernet owns port 80.
+
+If that line has not appeared yet, the station is still waiting for DHCP and no Wi-Fi server exists. `wifi:connected with <ssid>` only means the AP accepted the association; the lease is separate:
+
+```
+I (567)   wifi:connected with theo, aid = 4, channel 8, rssi: -29
+I (570)   wifi:pm start, type: 1
+I (90642) esp_netif_handlers: sta ip: 192.168.11.8      <- 90 s later
+```
+
+On this setup the gap ranged from 2 s to 173 s across reboots, with the antenna untouched and RSSI between -9 and -29 dBm. The cause is the default `WIFI_PS_MIN_MODEM` power save (the `wifi:pm start, type: 1` line) against an AP that buffers broadcast poorly: the station wakes on a listen interval of 307 ms scaled by a DTIM of 3, and a DHCP OFFER that misses that window waits for the next retry. Calling `esp_wifi_set_ps(WIFI_PS_NONE)` after `esp_wifi_start()` brought the same board to a steady 2.1-2.4 s. It is left at the default here because it costs idle current and most APs do not show the problem — this is worth knowing about, not worth changing for everyone.
 
 ## Appendix
 

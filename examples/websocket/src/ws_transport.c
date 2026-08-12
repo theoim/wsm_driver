@@ -20,26 +20,23 @@
 
 static const char *TAG = "ws_tx";
 
-static const net_sock_ops_t *s_ops;
+/* No module-level vtable here on purpose -- see the header. Two servers run
+ * concurrently on two stacks, so the vtable belongs to the call, not the file. */
 
-void ws_transport_bind(const void *ops)
-{
-    s_ops = (const net_sock_ops_t *)ops;
-}
-
-static void set_timeout(int fd, uint32_t ms)
+static void set_timeout(const net_sock_ops_t *ops, int fd, uint32_t ms)
 {
     struct timeval tv = {
         .tv_sec  = ms / 1000,
         .tv_usec = (ms % 1000) * 1000,
     };
-    s_ops->setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    ops->setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 }
 
-int ws_transport_listen(uint16_t port)
+int ws_transport_listen(const void *vops, uint16_t port)
 {
+    const net_sock_ops_t *s_ops = (const net_sock_ops_t *)vops;
     if (s_ops == NULL) {
-        ESP_LOGE(TAG, "transport used before bind");
+        ESP_LOGE(TAG, "listen(%u) with no socket vtable", port);
         return -1;
     }
 
@@ -70,9 +67,10 @@ int ws_transport_listen(uint16_t port)
     return fd;
 }
 
-int ws_transport_accept(int listen_fd, uint32_t timeout_ms)
+int ws_transport_accept(const void *vops, int listen_fd, uint32_t timeout_ms)
 {
-    set_timeout(listen_fd, timeout_ms);
+    const net_sock_ops_t *s_ops = (const net_sock_ops_t *)vops;
+    set_timeout(s_ops, listen_fd, timeout_ms);
 
     struct sockaddr_in peer;
     socklen_t sl = sizeof(peer);
@@ -84,9 +82,11 @@ int ws_transport_accept(int listen_fd, uint32_t timeout_ms)
     return fd;
 }
 
-int ws_transport_recv(int fd, void *buf, size_t size, uint32_t timeout_ms)
+int ws_transport_recv(const void *vops, int fd, void *buf, size_t size,
+                      uint32_t timeout_ms)
 {
-    set_timeout(fd, timeout_ms);
+    const net_sock_ops_t *s_ops = (const net_sock_ops_t *)vops;
+    set_timeout(s_ops, fd, timeout_ms);
 
     int n = s_ops->recv(fd, buf, size, 0);
     if (n > 0) {
@@ -99,8 +99,9 @@ int ws_transport_recv(int fd, void *buf, size_t size, uint32_t timeout_ms)
     return (errno == EAGAIN || errno == EWOULDBLOCK) ? 0 : -1;
 }
 
-int ws_transport_send(int fd, const void *buf, size_t len)
+int ws_transport_send(const void *vops, int fd, const void *buf, size_t len)
 {
+    const net_sock_ops_t *s_ops = (const net_sock_ops_t *)vops;
     const uint8_t *p = (const uint8_t *)buf;
     size_t sent = 0;
 
@@ -121,9 +122,10 @@ int ws_transport_send(int fd, const void *buf, size_t len)
     return 0;
 }
 
-void ws_transport_close(int fd)
+void ws_transport_close(const void *vops, int fd)
 {
-    if (fd >= 0) {
+    const net_sock_ops_t *s_ops = (const net_sock_ops_t *)vops;
+    if (s_ops != NULL && fd >= 0) {
         s_ops->close(fd);
     }
 }

@@ -79,6 +79,10 @@ typedef void (*ws_on_message_fn)(ws_conn_t *conn, ws_data_type_t type,
 #define WS_RX_BUFFER_SIZE 256
 
 struct ws_conn {
+    /* Socket vtable this connection's fd belongs to (&net_eth_ops or
+     * &net_wifi_ops). Carried per connection because the two servers run at the
+     * same time on two different stacks -- see ws_transport.h. */
+    const void      *ops;
     int              fd;
     bool             open;
 

@@ -58,9 +58,11 @@ static void on_message(ws_conn_t *conn, ws_data_type_t type,
     }
 }
 
-static void serve_one(const char *name, int fd, char *buffer, size_t buffer_size)
+static void serve_one(const char *name, const void *ops, int fd,
+                      char *buffer, size_t buffer_size)
 {
     ws_conn_t conn = {
+        .ops         = ops,
         .fd          = fd,
         .open        = false,
         .on_message  = on_message,
@@ -126,9 +128,7 @@ static void ws_server_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    ws_transport_bind(c->ops);
-
-    int listen_fd = ws_transport_listen(c->port);
+    int listen_fd = ws_transport_listen(c->ops, c->port);
     if (listen_fd < 0) {
         ESP_LOGE(TAG, "[%s] cannot listen on %u", c->name, c->port);
         goto done;
@@ -136,7 +136,7 @@ static void ws_server_task(void *arg)
     ESP_LOGI(TAG, "[%s] WebSocket server on port %u", c->name, c->port);
 
     for (;;) {
-        int fd = ws_transport_accept(listen_fd, ACCEPT_TIMEOUT_MS);
+        int fd = ws_transport_accept(c->ops, listen_fd, ACCEPT_TIMEOUT_MS);
         if (fd == 0) {
             continue;                   /* nobody yet */
         }
@@ -145,14 +145,14 @@ static void ws_server_task(void *arg)
             break;
         }
 
-        serve_one(c->name, fd, buffer, WS_MAX_MESSAGE_SIZE);
+        serve_one(c->name, c->ops, fd, buffer, WS_MAX_MESSAGE_SIZE);
 
         /* Closing an accepted connection is also what re-arms the listener on
          * the TOE, where the two are the same socket -- see ws_transport.h. */
-        ws_transport_close(fd);
+        ws_transport_close(c->ops, fd);
     }
 
-    ws_transport_close(listen_fd);
+    ws_transport_close(c->ops, listen_fd);
 
 done:
     free(buffer);

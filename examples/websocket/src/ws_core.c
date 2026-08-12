@@ -143,7 +143,7 @@ static int rx_fill(ws_conn_t *conn, uint32_t timeout_ms)
         return 1;                       /* still holding something */
     }
 
-    int n = ws_transport_recv(conn->fd, conn->rx, sizeof(conn->rx), timeout_ms);
+    int n = ws_transport_recv(conn->ops, conn->fd, conn->rx, sizeof(conn->rx), timeout_ms);
     if (n <= 0) {
         return n;                       /* 0 timeout, -1 closed/failed */
     }
@@ -225,7 +225,7 @@ static void send_status(ws_conn_t *conn, const char *status_line)
     int n = snprintf(buf, sizeof(buf), "%s\r\nConnection: close\r\n\r\n",
                      status_line);
     if (n > 0) {
-        ws_transport_send(conn->fd, buf, (size_t)n);
+        ws_transport_send(conn->ops, conn->fd, buf, (size_t)n);
     }
 }
 
@@ -239,10 +239,10 @@ int ws_http_respond(ws_conn_t *conn, const char *status, const char *content_typ
                      "Content-Length: %u\r\n"
                      "Connection: close\r\n\r\n",
                      status, content_type, (unsigned)body_len);
-    if (n <= 0 || ws_transport_send(conn->fd, header, (size_t)n) < 0) {
+    if (n <= 0 || ws_transport_send(conn->ops, conn->fd, header, (size_t)n) < 0) {
         return -1;
     }
-    if (body_len > 0 && ws_transport_send(conn->fd, body, body_len) < 0) {
+    if (body_len > 0 && ws_transport_send(conn->ops, conn->fd, body, body_len) < 0) {
         return -1;
     }
     return 0;
@@ -342,7 +342,7 @@ ws_request_t ws_read_request(ws_conn_t *conn)
                      "Connection: Upgrade\r\n"
                      "Sec-WebSocket-Accept: %s\r\n\r\n",
                      accept);
-    if (n <= 0 || ws_transport_send(conn->fd, response, (size_t)n) < 0) {
+    if (n <= 0 || ws_transport_send(conn->ops, conn->fd, response, (size_t)n) < 0) {
         return WS_REQ_FAILED;
     }
 
@@ -388,10 +388,10 @@ int ws_send(ws_conn_t *conn, ws_data_type_t type, const char *data, size_t len)
         return -1;
     }
 
-    if (ws_transport_send(conn->fd, header, hlen) < 0) {
+    if (ws_transport_send(conn->ops, conn->fd, header, hlen) < 0) {
         return -1;
     }
-    if (len > 0 && ws_transport_send(conn->fd, data, len) < 0) {
+    if (len > 0 && ws_transport_send(conn->ops, conn->fd, data, len) < 0) {
         return -1;
     }
     return 0;
@@ -417,7 +417,7 @@ void ws_close(ws_conn_t *conn, ws_close_code_t code, const char *reason)
     if (rlen) {
         memcpy(&frame[4], reason, rlen);
     }
-    ws_transport_send(conn->fd, frame, 4 + rlen);
+    ws_transport_send(conn->ops, conn->fd, frame, 4 + rlen);
 }
 
 /*
@@ -592,7 +592,7 @@ int ws_poll(ws_conn_t *conn, uint32_t timeout_ms)
             if (h.length) {
                 memcpy(&pong[2], control, h.length);
             }
-            ws_transport_send(conn->fd, pong, 2 + h.length);
+            ws_transport_send(conn->ops, conn->fd, pong, 2 + h.length);
         }
         break;
 
