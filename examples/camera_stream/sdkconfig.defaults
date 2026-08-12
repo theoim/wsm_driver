@@ -1,0 +1,43 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# 1 ms tick: the TOE poll loops (wiztoe_recvfrom) yield in 1 ms steps and count
+# those steps for SO_RCVTIMEO/SO_SNDTIMEO. At the IDF default of 100 Hz a 1 ms
+# delay truncates to 0 ticks, which busy-waits and starves the idle task.
+CONFIG_FREERTOS_HZ=1000
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set
+
+# --- flash and partitions ---
+# The XIAO ESP32-S3 has 8 MB; the default 2 MB header would make the bootloader
+# ignore most of it, and the stock 1 MB app partition cannot hold esp32-camera
+# plus the Wi-Fi stack.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- PSRAM: the frame buffers live here ---
+# Two UXGA JPEG buffers do not fit in internal RAM, and CAMERA_FB_IN_PSRAM in
+# cam_source.c assumes this is on. The XIAO ESP32-S3 carries octal PSRAM; a
+# quad setting here fails to detect it and the camera init then fails with
+# ESP_ERR_NO_MEM rather than anything that names the real cause.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+
+# --- console ---
+# RSTn/INTn of the WIZnet module land on GPIO43/44 on this board, which are the
+# ESP32-S3's UART0 console pins. The XIAO's USB is native USB Serial/JTAG, so
+# moving the console there frees both pins and keeps the log working.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# --- wsm_driver shared settings ---
+CONFIG_WSM_DRIVER_ENABLED=y
+CONFIG_WSM_DRIVER_BACKEND_TOE=y
+# The chip and its pins follow the board, so pick the board and leave both
+# alone: menuconfig -> Component config -> WIZnet WSM Driver -> Board. Setting
+# CONFIG_WSM_DRIVER_CHIP_* here would contradict whichever board is selected
+# and leave the driver talking to the wrong chip on the right pins.
+# For wiring no listed board covers, choose "Custom" -- that is the one setting
+# where the pin fields become editable.

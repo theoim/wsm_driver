@@ -1,0 +1,7 @@
+# The default single-factory table gives the app 1 MB, which esp32-camera plus
+# the Wi-Fi stack overruns. 3 MB of the XIAO's 8 MB flash is comfortable and
+# leaves room to grow.
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,     0x9000,  0x6000
+phy_init, data, phy,     0xf000,  0x1000
+factory,  app,  factory, 0x10000, 3M

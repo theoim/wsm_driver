@@ -8,6 +8,10 @@
 **/sdkconfig
 **/sdkconfig.old
 **/dependencies.lock
+# Fetched by the IDF component manager from idf_component.yml, so it is a
+# build output rather than source -- examples/camera_stream pulls ~70k lines
+# of esp32-camera into here.
+**/managed_components/
 
 # Editor-local settings (machine-specific paths; the shared entry point is
 # wsm_driver.code-workspace which is committed)

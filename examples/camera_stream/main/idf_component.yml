@@ -1,0 +1,12 @@
+## The first example here to take an external dependency, and deliberately so.
+##
+## Everything else in this repository carries its protocol code in the example
+## itself, because a TFTP client or a WebSocket framer is small enough to read
+## and the point is to show it. A camera driver is neither: esp32-camera is DMA
+## setup, sensor tables for a dozen parts, and JPEG plumbing, none of which
+## teaches anything about a network stack. Espressif maintains it, it is
+## Apache-2.0, and it is what an ESP32-S3 camera project would use anyway.
+dependencies:
+  espressif/esp32-camera: "^2.0.0"
+  idf:
+    version: ">=6.0"
