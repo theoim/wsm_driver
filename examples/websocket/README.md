@@ -15,8 +15,6 @@ Only a serial terminal and a web browser. There is no server to install, no test
 2. Connect an Ethernet cable from the module's RJ45 port to your PC or network.
 3. Connect the ESP32-S3 board to your PC with a USB cable.
 
-![][link-hardware]
-
 ## Step 3: Setup WebSocket Example
 
 ### Chip and SPI configuration
@@ -240,11 +238,10 @@ The device is listening but unreachable. Confirm the PC is on the same subnet as
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-mwebsockets]: https://github.com/skaarj1989/mWebSockets
 
-[link-hardware]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/hardware.png
-[link-config_main]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/config_main.png
-[link-config_component]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/config_component.png
-[link-config_wiz_toe]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/config_wiz_toe.png
+[link-config_main]: ../../static/image/websocket/config_main.png
+[link-config_component]: ../../static/image/websocket/config_component.png
+[link-config_wiz_toe]: ../../static/image/websocket/config_wiz_toe.png
 
-[link-build_log]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/build_log.png
-[link-run_page]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/run_page.png
-[link-run_echo]: https://raw.githubusercontent.com/Wiznet/wsm_driver/main/static/image/websocket/run_echo.png
+[link-build_log]: ../../static/image/websocket/build_log.png
+[link-run_page]: ../../static/image/websocket/run_page.png
+[link-run_echo]: ../../static/image/websocket/run_echo.png
