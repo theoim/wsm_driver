@@ -129,16 +129,39 @@ Browser ─────────►│                                │
 | `GET /api/status` | the status document — every control returns it too |
 | `GET /api/start` · `/api/stop` | start and stop the stream |
 | `GET /api/res?v=640x480` | frame size |
-| `GET /api/cam?quality=12&xclk=20` | JPEG quality and sensor clock |
+| `GET /api/cam?quality=12&xclk=20&contrast=1` | JPEG quality, sensor clock, and any sensor control |
+| `GET /api/controls` | the control descriptors — name, label, group, range |
 | `GET /api/reset` | re-initialise a wedged sensor |
 
 Every control answers with the same status document as `/api/status`, so the page feeds each response through one render path and never has to work out what changed.
+
+### The sensor controls
+
+Twenty-three of them, in four groups:
+
+| Group | Controls |
+|---|---|
+| Image | brightness, contrast, saturation, sharpness, effect |
+| Exposure | AWB, AWB gain, WB mode, AEC, AEC DSP, AE level, exposure, AGC, gain, gain ceiling |
+| Correction | lens correction, gamma, black pixel, white pixel, downsize |
+| Orientation | mirror, flip, test pattern |
+
+They live in one table in `cam_source.c` — name, label, group, range and an apply function per row — and everything else is generated from it: the query parser walks it, the status JSON walks it, and the page builds its panel by fetching `/api/controls` at load. Adding a row makes a new slider appear in the browser with no edit to the HTML. Written three separate times instead, the three lists would drift.
+
+Two of them are worth knowing about before the rest:
+
+- **Test pattern** puts a known set of colour bars out of the sensor itself. If the bars arrive clean the fault is in front of the lens; if they do not, it is behind it. That splits "the picture looks wrong" in half without any equipment.
+- **Exposure**, **gain** and **WB mode** only bite once their automatic counterpart — AEC, AGC, AWB — is switched off. That is why each sits next to its own toggle rather than in a "manual" group of its own.
+
+A range of 0..1 renders as a checkbox and anything wider as a slider; sliders send on release rather than on every step, because a drag across the range would otherwise fire one request per notch and several of these re-initialise the sensor.
+
+Controls survive a re-initialisation. Changing resolution or XCLK tears the driver down, and `esp_camera_init()` resets the sensor to its own defaults, so `apply_all_controls()` pushes the whole table back afterwards — otherwise every setting would silently revert the first time the frame size changed.
 
 ### Why this one listens more than once
 
 The other examples in this repository serve one connection at a time. This one cannot. The page holds `/stream` open for as long as it is on screen **while** polling `/api/status` once a second, so two connections have to be live at the same instant or the charts never update.
 
-On LwIP that is free: `accept()` returns a new descriptor and the listener stays open. On the TOE it is not — the listening hardware socket *becomes* the connection, so one listener holds exactly one client and nothing is left listening while it does. Serving several clients there means several listening hardware sockets on the same port, which is what `examples/tcp_server_multi_socket` demonstrates and what `http_listen_pool()` does here. The count follows the backend rather than being a preference:
+On LwIP that is free: `accept()` returns a new descriptor and the listener stays open, so one listener feeds any number of connections. On the TOE it is not — the listening hardware socket *becomes* the connection, so one listener holds exactly one client and nothing is left listening while it does. Serving several clients there means several listening hardware sockets on the same port, which is what `examples/tcp_server_multi_socket` demonstrates and what `http_listen_pool()` does here. The count follows the backend rather than being a preference:
 
 ```c
 #if defined(WSM_DRIVER_SOCKET_WRAP) && WSM_DRIVER_SOCKET_WRAP
@@ -148,7 +171,9 @@ On LwIP that is free: `accept()` returns a new descriptor and the listener stays
 #endif
 ```
 
-Three is the practical minimum on the TOE, and it is also the ceiling on simultaneous connections — a browser holding a stream, a poll and a stale socket will use all of them, and the next request is refused rather than queued.
+**Listeners and connections are two different arrays**, and conflating them is a mistake worth describing because the first version made it. Tying one connection slot to each listener is right on the TOE, where the two really are the same socket, and wrong on LwIP, where one listener should feed several: the Wi-Fi side ended up with a single slot, so the stream occupied it and the page's own status poll queued behind its own stream, leaving the charts frozen while the video played. `MAX_CONNS` now sizes the slots, `http_listen_pool()` sizes the listeners, and `listener_in_use()` — asked by descriptor rather than by backend, so no `#if` is needed — is what keeps a TOE listener from being accepted on twice.
+
+Three connections is the ceiling either way. A browser holding a stream, a poll and a stale socket will use all of them, and the next request waits for a slot rather than being queued by the stack.
 
 ## Step 4: Build
 
@@ -207,7 +232,14 @@ I (3392) esp_netif_handlers: sta ip: 192.168.11.8, mask: 255.255.255.0, gw: 192.
 I (3458) cam_server: [wifi] camera server on port 81, 1 listener (lwIP)
 ```
 
-**What the Wi-Fi side measured here is a property of the test network, not of lwIP.** On the AP used for this work the Wi-Fi path topped out at 0.33-0.35 Mbps *regardless of frame size* — 7.8 fps at QVGA and 3.2 fps at VGA, against 27.3 and 25.3 over Ethernet with byte-identical frames. A bandwidth ceiling that does not move when the payload changes is a link problem, and this is the same AP that took up to 173 s to hand out a DHCP lease and dropped Modbus requests until power save was disabled. Read the comparison as "both stacks carry the same camera at once", not as a measurement of what LwIP can do.
+Both interfaces measured at 640x480, quality 12, with the status poll running:
+
+| Interface | Stack | Frame rate | Link |
+|---|---|---|---|
+| Ethernet | TOE | 27.2 fps | 2.68 Mbps |
+| Wi-Fi | LwIP | 15.8 fps | 1.56 Mbps |
+
+Same camera, same frame size, same second — the two servers are running side by side off one sensor, which is the comparison this example exists to make. Read it as an ordering rather than a ratio: the Wi-Fi figure depends on the AP, the distance and what else is on the channel, none of which are properties of LwIP.
 
 ## Troubleshooting
 
@@ -235,7 +267,7 @@ Expected, and it is the sensor rather than the network. Changing resolution or X
 
 Worth knowing before this gets pointed at anything that matters. None of these are accidents; they are where the example stops.
 
-- **Three connections, total.** On the TOE that is three listening hardware sockets, and there is no queue behind them: the fourth request is refused.
+- **Three connections, total** (`MAX_CONNS`). A fourth waits for a slot to free rather than being served, and on the TOE it also needs one of the three listening hardware sockets to be back in listen.
 - **Timeouts are per read, not per session**, and `send()` has no deadline at all — on the TOE backend `SO_SNDTIMEO` is accepted and then ignored by `wiztoe_send()`, so a client that stops reading mid-frame can park the server task. That one is in the component rather than the example.
 - **No authentication, no TLS.** Anything that can reach the address can watch the camera and change its settings.
 - **One sensor, one lock.** Both interfaces stream from the same camera under one mutex, so a frame going out on Ethernet delays the Wi-Fi stream's next capture and the two frame rates are not independent.

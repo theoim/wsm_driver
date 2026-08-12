@@ -25,6 +25,11 @@ static const char *TAG = "cam";
 static SemaphoreHandle_t s_lock;
 static camera_fb_t      *s_fb;
 
+/* Defined with the control table further down; declared here because both
+ * init paths have to re-apply every control after esp_camera_init() resets
+ * the sensor. */
+static void apply_all_controls(sensor_t *s);
+
 static cam_res_t s_res     = CAM_RES_VGA;
 static int       s_quality = 12;
 static int       s_xclk    = 20;
@@ -98,11 +103,7 @@ int cam_source_init(void)
 
     sensor_t *s = esp_camera_sensor_get();
     if (s != NULL) {
-        /* The OV3660 leaves the factory upside down on this module, and the
-         * defaults are washed out at the low JPEG quality this example uses. */
-        s->set_vflip(s, 1);
-        s->set_brightness(s, 1);
-        s->set_saturation(s, -1);
+        apply_all_controls(s);
         ESP_LOGI(TAG, "sensor PID 0x%04X up at %s, quality %d, xclk %d MHz",
                  s->id.PID, kRes[s_res].name, s_quality, s_xclk);
     }
@@ -150,12 +151,7 @@ static int reinit_locked(void)
         ESP_LOGE(TAG, "re-init failed: %s", esp_err_to_name(err));
         return -1;
     }
-    sensor_t *s = esp_camera_sensor_get();
-    if (s != NULL) {
-        s->set_vflip(s, 1);
-        s->set_brightness(s, 1);
-        s->set_saturation(s, -1);
-    }
+    apply_all_controls(esp_camera_sensor_get());
     return 0;
 }
 
@@ -232,6 +228,154 @@ int cam_reset(void)
 {
     ESP_LOGW(TAG, "sensor reset requested");
     return with_lock(reinit_locked);
+}
+
+/* ---- sensor controls ------------------------------------------------------
+ *
+ * One row per control, and one apply function per row, so the parser, the JSON
+ * and the page's panel all come from this table rather than from three lists
+ * that have to be kept in step.
+ *
+ * Defaults are the sensor's own after reset, except the three cam_source_init()
+ * already applied: vflip because the module sits upside down on the Sense
+ * board, and brightness/saturation because the OV3660 is washed out at the JPEG
+ * quality this example streams at.
+ */
+typedef int (*cam_apply_fn)(sensor_t *s, int value);
+
+static int ap_brightness(sensor_t *s, int v) { return s->set_brightness(s, v); }
+static int ap_contrast(sensor_t *s, int v)   { return s->set_contrast(s, v); }
+static int ap_saturation(sensor_t *s, int v) { return s->set_saturation(s, v); }
+static int ap_sharpness(sensor_t *s, int v)  { return s->set_sharpness(s, v); }
+static int ap_special(sensor_t *s, int v)    { return s->set_special_effect(s, v); }
+
+static int ap_awb(sensor_t *s, int v)        { return s->set_whitebal(s, v); }
+static int ap_awb_gain(sensor_t *s, int v)   { return s->set_awb_gain(s, v); }
+static int ap_wb_mode(sensor_t *s, int v)    { return s->set_wb_mode(s, v); }
+static int ap_aec(sensor_t *s, int v)        { return s->set_exposure_ctrl(s, v); }
+static int ap_aec2(sensor_t *s, int v)       { return s->set_aec2(s, v); }
+static int ap_ae_level(sensor_t *s, int v)   { return s->set_ae_level(s, v); }
+static int ap_aec_value(sensor_t *s, int v)  { return s->set_aec_value(s, v); }
+static int ap_agc(sensor_t *s, int v)        { return s->set_gain_ctrl(s, v); }
+static int ap_agc_gain(sensor_t *s, int v)   { return s->set_agc_gain(s, v); }
+static int ap_gainceiling(sensor_t *s, int v)
+{
+    return s->set_gainceiling(s, (gainceiling_t)v);
+}
+
+static int ap_lenc(sensor_t *s, int v)       { return s->set_lenc(s, v); }
+static int ap_raw_gma(sensor_t *s, int v)    { return s->set_raw_gma(s, v); }
+static int ap_bpc(sensor_t *s, int v)        { return s->set_bpc(s, v); }
+static int ap_wpc(sensor_t *s, int v)        { return s->set_wpc(s, v); }
+static int ap_dcw(sensor_t *s, int v)        { return s->set_dcw(s, v); }
+
+static int ap_hmirror(sensor_t *s, int v)    { return s->set_hmirror(s, v); }
+static int ap_vflip(sensor_t *s, int v)      { return s->set_vflip(s, v); }
+static int ap_colorbar(sensor_t *s, int v)   { return s->set_colorbar(s, v); }
+
+static struct {
+    cam_ctrl_t   ctrl;
+    cam_apply_fn apply;
+} s_ctrls[] = {
+    /* Image */
+    {{ "brightness", "Brightness",   CAM_GROUP_IMAGE,       -2,    2,  1 }, ap_brightness },
+    {{ "contrast",   "Contrast",     CAM_GROUP_IMAGE,       -2,    2,  0 }, ap_contrast   },
+    {{ "saturation", "Saturation",   CAM_GROUP_IMAGE,       -2,    2, -1 }, ap_saturation },
+    {{ "sharpness",  "Sharpness",    CAM_GROUP_IMAGE,       -2,    2,  0 }, ap_sharpness  },
+    /* 0 none, 1 negative, 2 grayscale, 3 red, 4 green, 5 blue, 6 sepia */
+    {{ "effect",     "Effect",       CAM_GROUP_IMAGE,        0,    6,  0 }, ap_special    },
+
+    /* Exposure and white balance. The manual levers only bite once their
+     * automatic counterpart is switched off, which is why they sit together. */
+    {{ "awb",        "Auto WB",      CAM_GROUP_EXPOSURE,     0,    1,  1 }, ap_awb        },
+    {{ "awb_gain",   "AWB gain",     CAM_GROUP_EXPOSURE,     0,    1,  1 }, ap_awb_gain   },
+    /* 0 auto, 1 sunny, 2 cloudy, 3 office, 4 home */
+    {{ "wb_mode",    "WB mode",      CAM_GROUP_EXPOSURE,     0,    4,  0 }, ap_wb_mode    },
+    {{ "aec",        "Auto exposure", CAM_GROUP_EXPOSURE,    0,    1,  1 }, ap_aec        },
+    {{ "aec2",       "AEC DSP",      CAM_GROUP_EXPOSURE,     0,    1,  1 }, ap_aec2       },
+    {{ "ae_level",   "AE level",     CAM_GROUP_EXPOSURE,    -2,    2,  0 }, ap_ae_level   },
+    {{ "aec_value",  "Exposure",     CAM_GROUP_EXPOSURE,     0, 1200, 300 }, ap_aec_value },
+    {{ "agc",        "Auto gain",    CAM_GROUP_EXPOSURE,     0,    1,  1 }, ap_agc        },
+    {{ "agc_gain",   "Gain",         CAM_GROUP_EXPOSURE,     0,   30,  0 }, ap_agc_gain   },
+    /* 0 = 2x through 6 = 128x */
+    {{ "gainceiling", "Gain ceiling", CAM_GROUP_EXPOSURE,    0,    6,  0 }, ap_gainceiling },
+
+    /* Correction */
+    {{ "lenc",       "Lens correction", CAM_GROUP_CORRECTION, 0,   1,  1 }, ap_lenc       },
+    {{ "raw_gma",    "Gamma",        CAM_GROUP_CORRECTION,    0,   1,  1 }, ap_raw_gma    },
+    {{ "bpc",        "Black pixel",  CAM_GROUP_CORRECTION,    0,   1,  0 }, ap_bpc        },
+    {{ "wpc",        "White pixel",  CAM_GROUP_CORRECTION,    0,   1,  1 }, ap_wpc        },
+    {{ "dcw",        "Downsize",     CAM_GROUP_CORRECTION,    0,   1,  1 }, ap_dcw        },
+
+    /* Orientation and test */
+    {{ "hmirror",    "Mirror",       CAM_GROUP_ORIENTATION,   0,   1,  0 }, ap_hmirror    },
+    {{ "vflip",      "Flip",         CAM_GROUP_ORIENTATION,   0,   1,  1 }, ap_vflip      },
+    /* A known pattern straight out of the sensor: if the bars arrive clean the
+     * fault is in front of the lens, and if they do not it is behind it. */
+    {{ "colorbar",   "Test pattern", CAM_GROUP_ORIENTATION,   0,   1,  0 }, ap_colorbar   },
+};
+
+#define CTRL_COUNT ((int)(sizeof(s_ctrls) / sizeof(s_ctrls[0])))
+
+static const char *kGroupName[CAM_GROUP_COUNT] = {
+    [CAM_GROUP_IMAGE]       = "Image",
+    [CAM_GROUP_EXPOSURE]    = "Exposure",
+    [CAM_GROUP_CORRECTION]  = "Correction",
+    [CAM_GROUP_ORIENTATION] = "Orientation",
+};
+
+int cam_ctrl_count(void) { return CTRL_COUNT; }
+
+const cam_ctrl_t *cam_ctrl_at(int index)
+{
+    return (index >= 0 && index < CTRL_COUNT) ? &s_ctrls[index].ctrl : NULL;
+}
+
+const char *cam_group_name(cam_group_t group)
+{
+    return (group >= 0 && group < CAM_GROUP_COUNT) ? kGroupName[group] : "?";
+}
+
+int cam_ctrl_set(const char *name, int value)
+{
+    for (int i = 0; i < CTRL_COUNT; i++) {
+        cam_ctrl_t *ctrl = &s_ctrls[i].ctrl;
+        if (strcmp(ctrl->name, name) != 0) {
+            continue;
+        }
+        if (value < ctrl->min || value > ctrl->max) {
+            return -1;
+        }
+
+        if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(3000)) != pdTRUE) {
+            return -1;
+        }
+        sensor_t *s = esp_camera_sensor_get();
+        int rc = (s != NULL) ? s_ctrls[i].apply(s, value) : -1;
+        xSemaphoreGive(s_lock);
+
+        if (rc == 0) {
+            /* Only remember it once the sensor accepted it, so the page never
+             * shows a value the hardware refused. */
+            ctrl->value = value;
+            ESP_LOGI(TAG, "%s -> %d", name, value);
+        }
+        return rc;
+    }
+    return -1;
+}
+
+/* Push the whole table at the sensor. Used after every re-init, because
+ * esp_camera_init() resets the sensor and would otherwise silently undo
+ * everything the user set. */
+static void apply_all_controls(sensor_t *s)
+{
+    if (s == NULL) {
+        return;
+    }
+    for (int i = 0; i < CTRL_COUNT; i++) {
+        s_ctrls[i].apply(s, s_ctrls[i].ctrl.value);
+    }
 }
 
 cam_res_t cam_get_resolution(void) { return s_res; }

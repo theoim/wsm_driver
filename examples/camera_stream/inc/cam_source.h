@@ -81,6 +81,44 @@ int cam_set_quality(int quality);       /* 0..63, lower is better and bigger */
 int cam_set_xclk_mhz(int mhz);          /* 10..24; the sensor clock sweep      */
 int cam_reset(void);                    /* re-init after a wedged sensor       */
 
+/*
+ * ---- sensor controls -------------------------------------------------------
+ *
+ * Everything the OV3660 exposes beyond frame size and JPEG quality: the image
+ * levels, the exposure and gain machinery, the correction toggles, and mirroring.
+ *
+ * Described as a table rather than a function per control, because otherwise the
+ * same list has to be written three times -- once to parse the query, once to
+ * emit the status JSON, once to lay out the page -- and the three drift. The
+ * server walks this table for all three, and the page builds its panel from
+ * /api/controls, so adding a control here makes it appear in the browser with
+ * no edit to the HTML.
+ */
+typedef enum {
+    CAM_GROUP_IMAGE = 0,    /* brightness and friends           */
+    CAM_GROUP_EXPOSURE,     /* AEC / AGC / white balance        */
+    CAM_GROUP_CORRECTION,   /* lens shading, gamma, bad pixels  */
+    CAM_GROUP_ORIENTATION,  /* mirror, flip, test pattern       */
+    CAM_GROUP_COUNT,
+} cam_group_t;
+
+typedef struct {
+    const char *name;       /* the query key and the JSON key    */
+    const char *label;      /* what the page shows               */
+    cam_group_t group;
+    int         min;
+    int         max;        /* min 0 / max 1 means a checkbox    */
+    int         value;
+} cam_ctrl_t;
+
+int                 cam_ctrl_count(void);
+const cam_ctrl_t   *cam_ctrl_at(int index);
+const char         *cam_group_name(cam_group_t group);
+
+/* Apply one control by name. Returns 0 on success, -1 if the name is unknown
+ * or the value is out of range. */
+int cam_ctrl_set(const char *name, int value);
+
 cam_res_t   cam_get_resolution(void);
 int         cam_get_quality(void);
 int         cam_get_xclk_mhz(void);

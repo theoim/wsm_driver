@@ -14,11 +14,13 @@
  * task that already carries a 4 KB request buffer, and on the TOE the sockets
  * are a fixed hardware resource anyway.
  *
- * Instead one task owns a small array of slots and round-robins: it offers each
- * idle listener a brief accept, then gives each open connection a slice of
- * service. A slice is one frame for a stream, or one whole request-and-response
- * for anything else, so no slot can hold the loop for longer than a frame time.
+ * Instead one task owns a small array of connection slots and round-robins:
+ * each pass offers the free listeners a brief accept, then gives every open
+ * connection a slice of service. A slice is one frame for a stream, or one whole
+ * request-and-response for anything else, so nothing can hold the loop for
+ * longer than a frame time.
  */
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,20 +76,41 @@ static const char *TAG = "cam_server";
  */
 #define ACCEPT_IDLE_MS      20
 #define ACCEPT_BUSY_MS      1
+
+/* Pause before rebuilding a listening socket that failed, so a persistent fault
+ * logs at a readable rate instead of filling the console. */
+#define LISTEN_RETRY_MS     1000
 #define REQUEST_TIMEOUT_MS  2000
 #define REQUEST_BUF_SIZE    512
-#define MAX_SLOTS           HTTP_MAX_LISTENERS
 
 #define STREAM_BOUNDARY     "wsmframe"
 
+/*
+ * Connections are tracked separately from listeners, because the relationship
+ * between the two is not the same on both backends.
+ *
+ * On the TOE they are one thing: accept() returns the listening socket itself,
+ * so a connection consumes the listener that produced it and closing gives it
+ * back. On LwIP they are independent: one listener produces new descriptors
+ * indefinitely and is never consumed.
+ *
+ * An earlier version had one array for both, which is right for the TOE and
+ * wrong for LwIP -- with a single listener there was a single slot, so the
+ * Wi-Fi side could hold exactly one connection and the page's status poll sat
+ * behind its own stream, leaving the charts frozen. Keeping the arrays apart
+ * lets each backend contribute what it actually has: listeners for accepting,
+ * slots for serving.
+ */
+#define MAX_CONNS  3
+
 typedef enum {
-    SLOT_IDLE = 0,      /* nothing connected; its listener is armed */
-    SLOT_STREAM,        /* an MJPEG response in progress            */
+    SLOT_FREE = 0,      /* nothing here                  */
+    SLOT_REQUEST,       /* connected, request not read yet */
+    SLOT_STREAM,        /* an MJPEG response in progress   */
 } slot_state_t;
 
 typedef struct {
-    int          listen_fd;   /* -1 once LwIP is serving from a shared listener */
-    int          conn_fd;
+    int          fd;
     slot_state_t state;
 } slot_t;
 
@@ -121,11 +144,11 @@ static int send_simple(const void *ops, int fd, const char *status,
  */
 static int send_status(const cam_server_ctx_t *c, int fd, cam_stats_t *st)
 {
-    char body[400];
+    char body[900];
     int n = snprintf(body, sizeof(body),
         "{\"streaming\":%s,\"res\":\"%s\",\"frames\":%u,\"dropped\":%u,"
         "\"fps\":%.1f,\"kb\":%u,\"capture_ms\":%u,\"send_ms\":%u,"
-        "\"quality\":%d,\"xclk\":%d,\"stack\":\"%s\"}",
+        "\"quality\":%d,\"xclk\":%d,\"stack\":\"%s\",\"ctrl\":{",
         st->streaming ? "true" : "false",
         cam_res_name(cam_get_resolution()),
         (unsigned)st->frames, (unsigned)st->dropped,
@@ -133,7 +156,55 @@ static int send_status(const cam_server_ctx_t *c, int fd, cam_stats_t *st)
         (unsigned)st->capture_ms, (unsigned)st->send_ms,
         cam_get_quality(), cam_get_xclk_mhz(), c->stack);
 
+    /* Current control values only -- the names, ranges and labels come from
+     * /api/controls once at page load, because this document is fetched every
+     * second and does not need to repeat what cannot change. */
+    for (int i = 0; i < cam_ctrl_count() && n > 0 && (size_t)n < sizeof(body); i++) {
+        const cam_ctrl_t *ctrl = cam_ctrl_at(i);
+        n += snprintf(body + n, sizeof(body) - n, "%s\"%s\":%d",
+                      i ? "," : "", ctrl->name, ctrl->value);
+    }
+    n += snprintf(body + n, sizeof(body) - n, "}}");
+
     if (n < 0 || (size_t)n >= sizeof(body)) {
+        return -1;
+    }
+    return send_simple(c->ops, fd, "200 OK", "application/json", body,
+                       (size_t)n);
+}
+
+/*
+ * The control descriptor list: name, label, group and range for every sensor
+ * control. Fetched once when the page loads, which is what lets the panel be
+ * built from the device rather than hardcoded in the HTML -- adding a row to
+ * the table in cam_source.c makes a new slider appear with no page edit.
+ */
+static int send_controls(const cam_server_ctx_t *c, int fd)
+{
+    /* Roughly 95 bytes per control once the name, label, group and range are
+     * quoted, so this holds about thirty of them. Adding controls past that
+     * needs a bigger buffer, and the overflow check below says so out loud --
+     * silently truncating produces JSON the page cannot parse, which shows up
+     * as an empty panel with no clue why. */
+    char body[3072];
+    int n = snprintf(body, sizeof(body), "[");
+
+    for (int i = 0; i < cam_ctrl_count() && n > 0 && (size_t)n < sizeof(body); i++) {
+        const cam_ctrl_t *ctrl = cam_ctrl_at(i);
+        n += snprintf(body + n, sizeof(body) - n,
+                      "%s{\"name\":\"%s\",\"label\":\"%s\",\"group\":\"%s\","
+                      "\"min\":%d,\"max\":%d}",
+                      i ? "," : "", ctrl->name, ctrl->label,
+                      cam_group_name(ctrl->group), ctrl->min, ctrl->max);
+    }
+    n += snprintf(body + n, sizeof(body) - n, "]");
+
+    if (n < 0 || (size_t)n >= sizeof(body)) {
+        ESP_LOGE(TAG, "control list needs %d bytes, buffer is %u -- "
+                 "raise it or the panel arrives empty",
+                 n, (unsigned)sizeof(body));
+        send_simple(c->ops, fd, "500 Internal Server Error", "text/plain",
+                    "control list too large\n", 23);
         return -1;
     }
     return send_simple(c->ops, fd, "200 OK", "application/json", body,
@@ -244,14 +315,28 @@ static int route(const cam_server_ctx_t *c, int fd, const http_request_t *req,
                     cam_set_resolution((cam_res_t)res);
                 }
             }
+        } else if (strcmp(api, "controls") == 0) {
+            send_controls(c, fd);
+            return -1;
         } else if (strcmp(api, "cam") == 0) {
             /* Absent parameters keep their value -- the page sends whichever
-             * slider moved, not the whole set. */
+             * control moved, not the whole set. That is also what makes the
+             * sentinel below safe: a control cannot legitimately be set to
+             * INT_MIN, so it stands in for "not present" without a second
+             * lookup to ask whether the key was there. */
             int quality = http_query_int(req->query, "quality",
                                          cam_get_quality());
             int xclk = http_query_int(req->query, "xclk", cam_get_xclk_mhz());
             cam_set_quality(quality);
             cam_set_xclk_mhz(xclk);
+
+            for (int i = 0; i < cam_ctrl_count(); i++) {
+                const cam_ctrl_t *ctrl = cam_ctrl_at(i);
+                int value = http_query_int(req->query, ctrl->name, INT_MIN);
+                if (value != INT_MIN) {
+                    cam_ctrl_set(ctrl->name, value);
+                }
+            }
         } else if (strcmp(api, "status") != 0) {
             send_simple(c->ops, fd, "404 Not Found", "text/plain",
                         "no such endpoint\n", 17);
@@ -271,7 +356,7 @@ static int serve_request(const cam_server_ctx_t *c, slot_t *slot,
                          cam_stats_t *st)
 {
     char buf[REQUEST_BUF_SIZE];
-    int n = http_recv(c->ops, slot->conn_fd, buf, sizeof(buf) - 1,
+    int n = http_recv(c->ops, slot->fd, buf, sizeof(buf) - 1,
                       REQUEST_TIMEOUT_MS);
     if (n <= 0) {
         return -1;
@@ -283,28 +368,54 @@ static int serve_request(const cam_server_ctx_t *c, slot_t *slot,
      * client this example does not serve. */
     http_request_t req;
     if (http_parse_request(buf, &req) < 0) {
-        send_simple(c->ops, slot->conn_fd, "400 Bad Request", "text/plain",
+        send_simple(c->ops, slot->fd, "400 Bad Request", "text/plain",
                     "bad request\n", 12);
         return -1;
     }
 
-    return route(c, slot->conn_fd, &req, st, &slot->state);
+    return route(c, slot->fd, &req, st, &slot->state);
 }
 
 /* ---- the task ------------------------------------------------------------- */
 
 static void close_slot(const cam_server_ctx_t *c, slot_t *slot)
 {
-    if (slot->conn_fd >= 0) {
+    if (slot->fd >= 0) {
         /* On the TOE this is also what re-arms the listener, because the two
-         * are the same socket. On LwIP the listener was never disturbed. */
-        http_close(c->ops, slot->conn_fd);
-        if (slot->conn_fd == slot->listen_fd) {
-            /* Same descriptor: it is a listener again, not a spent socket. */
-        }
-        slot->conn_fd = -1;
+         * are the same socket -- which is why the listener does not need to be
+         * reopened here. On LwIP the listener was never disturbed. */
+        http_close(c->ops, slot->fd);
+        slot->fd = -1;
     }
-    slot->state = SLOT_IDLE;
+    slot->state = SLOT_FREE;
+}
+
+/*
+ * Is this listener currently being used as a connection?
+ *
+ * Only ever true on the TOE, where accept() hands back the descriptor it was
+ * given. Asking the question by descriptor rather than by backend keeps the
+ * loop free of an #if: on LwIP no connection can ever equal a listener, so the
+ * answer is always false and the listener is always available.
+ */
+static bool listener_in_use(const slot_t *slots, int listen_fd)
+{
+    for (int i = 0; i < MAX_CONNS; i++) {
+        if (slots[i].state != SLOT_FREE && slots[i].fd == listen_fd) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static slot_t *free_slot(slot_t *slots)
+{
+    for (int i = 0; i < MAX_CONNS; i++) {
+        if (slots[i].state == SLOT_FREE) {
+            return &slots[i];
+        }
+    }
+    return NULL;
 }
 
 static void cam_server_task(void *arg)
@@ -313,11 +424,10 @@ static void cam_server_task(void *arg)
     cam_stats_t st;
     memset(&st, 0, sizeof(st));
 
-    slot_t slots[MAX_SLOTS];
-    for (int i = 0; i < MAX_SLOTS; i++) {
-        slots[i].listen_fd = -1;
-        slots[i].conn_fd = -1;
-        slots[i].state = SLOT_IDLE;
+    slot_t slots[MAX_CONNS];
+    for (int i = 0; i < MAX_CONNS; i++) {
+        slots[i].fd = -1;
+        slots[i].state = SLOT_FREE;
     }
 
     ESP_LOGI(TAG, "[%s] waiting for link...", c->name);
@@ -325,23 +435,22 @@ static void cam_server_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    int fds[HTTP_MAX_LISTENERS];
-    int opened = http_listen_pool(c->ops, c->port, c->listeners, fds);
-    if (opened == 0) {
+    int listen_fds[HTTP_MAX_LISTENERS];
+    int listeners = http_listen_pool(c->ops, c->port, c->listeners, listen_fds);
+    if (listeners == 0) {
         ESP_LOGE(TAG, "[%s] cannot listen on %u", c->name, c->port);
         goto done;
     }
-    for (int i = 0; i < opened; i++) {
-        slots[i].listen_fd = fds[i];
-    }
-    ESP_LOGI(TAG, "[%s] camera server on port %u, %d listener%s (%s)",
-             c->name, c->port, opened, opened == 1 ? "" : "s", c->stack);
+    ESP_LOGI(TAG, "[%s] camera server on port %u, %d listener%s, "
+             "%d connections (%s)",
+             c->name, c->port, listeners, listeners == 1 ? "" : "s",
+             MAX_CONNS, c->stack);
 
     for (;;) {
-        /* Decided once per pass rather than per slot, so every listener in this
-         * pass agrees on whether a stream is waiting behind it. */
+        /* Decided once per pass rather than per listener, so every accept in
+         * this pass agrees on whether a stream is waiting behind it. */
         bool streaming_now = false;
-        for (int i = 0; i < opened; i++) {
+        for (int i = 0; i < MAX_CONNS; i++) {
             if (slots[i].state == SLOT_STREAM) {
                 streaming_now = true;
                 break;
@@ -349,41 +458,48 @@ static void cam_server_task(void *arg)
         }
         uint32_t accept_ms = streaming_now ? ACCEPT_BUSY_MS : ACCEPT_IDLE_MS;
 
-        for (int i = 0; i < opened; i++) {
-            slot_t *slot = &slots[i];
-
-            if (slot->conn_fd < 0) {
-                int fd = http_accept(c->ops, slot->listen_fd, accept_ms);
-                if (fd > 0) {
-                    slot->conn_fd = fd;
-                    slot->state = SLOT_IDLE;
-                } else if (fd < 0) {
-                    ESP_LOGE(TAG, "[%s] listener %d failed, reopening",
-                             c->name, i);
-                    http_close(c->ops, slot->listen_fd);
-                    slot->listen_fd = -1;
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-
-                    int again[1];
-                    if (http_listen_pool(c->ops, c->port, 1, again) == 1) {
-                        slot->listen_fd = again[0];
-                    } else {
-                        ESP_LOGE(TAG, "[%s] listener %d is gone", c->name, i);
-                    }
-                }
+        /* ---- take new connections ---- */
+        for (int i = 0; i < listeners; i++) {
+            if (listen_fds[i] < 0 || listener_in_use(slots, listen_fds[i])) {
                 continue;
             }
+            slot_t *slot = free_slot(slots);
+            if (slot == NULL) {
+                break;                  /* every slot busy; nothing to accept into */
+            }
+
+            int fd = http_accept(c->ops, listen_fds[i], accept_ms);
+            if (fd > 0) {
+                slot->fd = fd;
+                slot->state = SLOT_REQUEST;
+            } else if (fd < 0) {
+                ESP_LOGE(TAG, "[%s] listener %d failed, reopening", c->name, i);
+                http_close(c->ops, listen_fds[i]);
+                listen_fds[i] = -1;
+                vTaskDelay(pdMS_TO_TICKS(LISTEN_RETRY_MS));
+
+                int again[1];
+                if (http_listen_pool(c->ops, c->port, 1, again) == 1) {
+                    listen_fds[i] = again[0];
+                } else {
+                    ESP_LOGE(TAG, "[%s] listener %d is gone", c->name, i);
+                }
+            }
+        }
+
+        /* ---- give every open connection a slice ---- */
+        for (int i = 0; i < MAX_CONNS; i++) {
+            slot_t *slot = &slots[i];
 
             if (slot->state == SLOT_STREAM) {
-                if (!st.streaming || stream_frame(c, slot->conn_fd, &st) < 0) {
+                if (!st.streaming || stream_frame(c, slot->fd, &st) < 0) {
                     ESP_LOGI(TAG, "[%s] stream closed", c->name);
                     close_slot(c, slot);
                 }
-                continue;
-            }
-
-            if (serve_request(c, slot, &st) < 0) {
-                close_slot(c, slot);
+            } else if (slot->state == SLOT_REQUEST) {
+                if (serve_request(c, slot, &st) < 0) {
+                    close_slot(c, slot);
+                }
             }
         }
 
