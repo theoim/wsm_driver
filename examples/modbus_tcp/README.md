@@ -6,12 +6,29 @@ A Modbus TCP server (slave). A master reads and writes the device's registers an
 
 ## Step 1: Prepare software
 
-A serial terminal and any Modbus master.
+A serial terminal and a Modbus master. There is nothing to install on the device side and no vendor tool involved — the protocol is the interface, so anything that speaks Modbus TCP will do.
 
-- [Tera Term][link-tera_term]
-- A Modbus master — [mbpoll][link-mbpoll] (command line, Windows/Linux/macOS), [Modbus Poll][link-modbus_poll] (Windows, GUI), or a few lines of Python
+- [Tera Term][link-tera_term] for the serial log
 
-There is nothing to install on the device side and no vendor tool involved: the protocol is the interface.
+### Choosing a master
+
+| Tool | Platform | Cost | Good for |
+|---|---|---|---|
+| **`tools/mb_probe.py`** (in this example) | any, Python 3 | free | one command, checks correctness rather than showing values |
+| [mbpoll][link-mbpoll] | Windows / Linux / macOS | free | quick one-liners, scripting, CI |
+| [Modbus Poll][link-modbus_poll] | Windows | trial, then paid | the industry default; live register grid, logging |
+| [QModMaster][link-qmodmaster] | Windows / Linux | free | a GUI without a licence, good for a quick look |
+| [pymodbus][link-pymodbus] | any, Python 3 | free | writing your own master or automated tests |
+
+**Start with `tools/mb_probe.py`.** It ships with the example, needs no install — MBAP is 7 bytes and `struct` can build it — and checks things a polling tool will not:
+
+- Every reply's transaction id, protocol id and unit id are matched against the request. A server that hardcodes any of them looks correct to a GUI, which sends one request at a time and never notices.
+- Writes are read back rather than trusted.
+- Refusals are verified to arrive **with the connection intact**. Dropping the socket instead of answering is the common way to get a Modbus server wrong, and it stays invisible until a master retries.
+
+Reach for a GUI when you want to watch values move — `mb_probe.py` answers "is this server correct", not "what is register 7 doing right now".
+
+> **Modbus Poll is not the same program as mbpoll.** The first is a commercial Windows GUI from Modbus Tools; the second is a free command-line tool. Similar names, unrelated projects.
 
 ## Step 2: Prepare hardware
 
@@ -93,6 +110,7 @@ Same layout as `examples/loopback`:
 | `inc/mb_transport.h` · `src/mb_transport.c` | the network seam |
 | `src/mb_server.c` | one session: MBAP framing, execute, reply |
 | `main/main.c` | orchestration only: bring interfaces up, start the tasks |
+| `tools/mb_probe.py` | a dependency-free master that checks every function code |
 
 `mb_core.c` touches no socket, no timer and no UART. `mb_pdu_execute()` is a pure function over a caller-owned `mb_datastore_t` — hand it a request PDU, get a response PDU back — which is what makes it identical on both network backends and testable on a host. Only `mb_transport.c` includes lwIP, and it calls the component's `net_sock_ops_t` vtable, so the same server runs on the WIZnet hardware sockets or on the software LwIP behind the Wi-Fi netif.
 
@@ -172,27 +190,50 @@ I (447) mb_server: [eth] waiting for link...
 I (451) mb_server: [eth] Modbus TCP server on port 502
 ```
 
-Point a master at it. With `mbpoll`, reading ten holding registers from address 1:
+### Check it with the bundled probe
 
 ```bash
-mbpoll -m tcp -a 1 -r 1 -c 10 192.168.11.2
+python tools/mb_probe.py 192.168.11.2
 ```
 
+A healthy server prints this, and exits 0:
+
 ```
-[1]:    1000
-[2]:    1001
-[3]:    1002
-...
+--- reads (the startup pattern from mb_datastore_init)
+0x03 holding[0:10]     -> [1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009]  OK
+0x04 input[0:8]        -> [0, 1, 4, 9, 16, 25, 36, 49]  OK
+0x01 coils[0:16]       -> [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]  OK
+0x02 discrete[0:16]    -> [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]  OK
+
+--- writes, each read back
+0x06 holding[5]        -> [48879]  OK
+0x10 holding[20:22]    -> [4369, 8738]  OK
+0x05 coil[1]           -> [1]  OK
+0x0F coils[8:12]       -> [0, 1, 0, 1]  OK
+
+--- refusals (the server must answer, not drop the connection)
+0x03 addr 9000         -> b'\x83\x02'  OK
+0x03 count 0           -> b'\x83\x03'  OK
+0x42 undefined         -> b'\xc2\x01'  OK
+
+15 requests on one connection, 0 failures
 ```
 
-Writing a single register and reading it back:
+48879 is 0xBEEF and 4369/8738 are 0x1111/0x2222 — the values the probe wrote, read back. The three `b'\x83...'` lines are exception replies: function code with the high bit set, then the exception code.
+
+### Or with a general-purpose master
 
 ```bash
-mbpoll -m tcp -a 1 -r 6 192.168.11.2 48879
-mbpoll -m tcp -a 1 -r 6 -c 1 192.168.11.2
+mbpoll -m tcp -a 1 -r 1 -c 10 192.168.11.2       # read ten holding registers
+mbpoll -m tcp -a 1 -r 6 192.168.11.2 48879       # write 0xBEEF to holding[5]
+mbpoll -m tcp -a 1 -r 6 -c 1 192.168.11.2        # read it back
 ```
 
-The serial log names each function code and the size of the reply it produced:
+`mbpoll -r 1` addresses the first register: the tools number from 1, the wire carries a zero-based address, and this server's holding registers start at 1000.
+
+### What the serial log shows
+
+Either way, the device names each function code and the size of the reply it produced:
 
 ```
 I (486591) mb_tx: master connected from 192.168.11.4
@@ -223,7 +264,12 @@ I (31791) wifi: got IP 192.168.11.8
 I (31803) mb_server: [wifi] Modbus TCP server on port 5020
 ```
 
-Address that one **with the port**: `mbpoll -m tcp -p 5020 -a 1 -r 1 -c 10 192.168.11.8`. Port 502 belongs to the Ethernet server, so a master given no port will always land there.
+Address that one **with the port** — port 502 belongs to the Ethernet server, so a master given no port will always land there:
+
+```bash
+python tools/mb_probe.py 192.168.11.8 5020
+mbpoll -m tcp -p 5020 -a 1 -r 1 -c 10 192.168.11.8
+```
 
 Leave a master polling over Ethernet while you do it. Both stay up, and the log prefix says which one is talking. That is the whole point of the example: identical protocol code driving WIZnet hardware sockets and software LwIP at the same time, differing only in the socket vtable each connection carries.
 
@@ -267,4 +313,6 @@ It is left at the default here because it costs idle current and most APs do not
 [link-tera_term]: https://osdn.net/projects/ttssh2/releases/
 [link-mbpoll]: https://github.com/epsilonrt/mbpoll
 [link-modbus_poll]: https://www.modbustools.com/modbus_poll.html
+[link-qmodmaster]: https://sourceforge.net/projects/qmodmaster/
+[link-pymodbus]: https://github.com/pymodbus-dev/pymodbus
 [link-s2e]: https://github.com/WIZnet-ioNIC/W55RP20-S2E
