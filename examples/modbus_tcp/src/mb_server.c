@@ -27,6 +27,10 @@ static const char *TAG = "mb_server";
 #define ACCEPT_TIMEOUT_MS   1000
 #define REQUEST_TIMEOUT_MS  1000
 
+/* Pause before rebuilding a listening socket that failed, so a persistent fault
+ * logs at a readable rate instead of filling the console. */
+#define LISTEN_RETRY_MS     1000
+
 typedef struct {
     const char *name;
     const void *ops;
@@ -139,8 +143,22 @@ static void mb_server_task(void *arg)
             continue;                   /* nobody yet */
         }
         if (fd < 0) {
-            ESP_LOGE(TAG, "[%s] accept failed", c->name);
-            break;
+            /* The listening socket itself failed, so polling it again would
+             * spin on the same error. Rebuild it rather than ending the task:
+             * a server that quietly stops accepting looks identical to an idle
+             * one from the outside, and only a reboot would recover it. */
+            ESP_LOGE(TAG, "[%s] accept failed, reopening the listener", c->name);
+            mb_transport_close(c->ops, listen_fd);
+            vTaskDelay(pdMS_TO_TICKS(LISTEN_RETRY_MS));
+
+            listen_fd = mb_transport_listen(c->ops, c->port);
+            if (listen_fd < 0) {
+                ESP_LOGE(TAG, "[%s] cannot reopen port %u, giving up",
+                         c->name, c->port);
+                goto done;
+            }
+            ESP_LOGI(TAG, "[%s] listening again on port %u", c->name, c->port);
+            continue;
         }
 
         ESP_LOGI(TAG, "[%s] session open", c->name);

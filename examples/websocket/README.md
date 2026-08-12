@@ -264,6 +264,16 @@ I (90642) esp_netif_handlers: sta ip: 192.168.11.8      <- 90 s later
 
 On this setup the gap ranged from 2 s to 173 s across reboots, with the antenna untouched and RSSI between -9 and -29 dBm. The cause is the default `WIFI_PS_MIN_MODEM` power save (the `wifi:pm start, type: 1` line) against an AP that buffers broadcast poorly: the station wakes on a listen interval of 307 ms scaled by a DTIM of 3, and a DHCP OFFER that misses that window waits for the next retry. Calling `esp_wifi_set_ps(WIFI_PS_NONE)` after `esp_wifi_start()` brought the same board to a steady 2.1-2.4 s. It is left at the default here because it costs idle current and most APs do not show the problem — this is worth knowing about, not worth changing for everyone.
 
+## Known limits
+
+Worth knowing before this gets pointed at anything that matters. None of these are accidents; they are where the example stops.
+
+- **Timeouts are per read, not per session.** `POLL_TIMEOUT_MS` bounds one `recv`, so a client that sends one byte just often enough keeps its session alive indefinitely — during the handshake as well as after it. With one connection per interface, that is enough to lock everyone else out. A product server wants an absolute deadline on the handshake, a cap on its total size, and an idle-session limit.
+- **`send()` has no deadline at all.** `ws_transport_send` loops until every byte is gone, and on the TOE backend `SO_SNDTIMEO` is accepted and then ignored — `wiztoe_send()` calls ioLibrary's blocking `send()` and never consults the stored timeout. A client that stops reading can therefore park the server task for as long as it likes. This one is in the component rather than the example, so the example cannot fix it.
+- **`ws://`, not `wss://`.** No TLS and no authentication: anything that can reach the address can open a session.
+- **Close frames are checked, not fully validated.** A 1-byte body is rejected and the peer's code is echoed back, but reserved close codes pass and the reason string is not checked for valid UTF-8. RFC 6455 asks for both.
+- **One connection per interface**, for the reason in [Step 3](#one-connection-at-a-time).
+
 ## Appendix
 
 - **Serving your own page:** `inc/ws_index_html.h` holds the page as a string literal, deliberately dependency-free — no CDN, no framework — because the device may be on a network with no route to the internet. Replace the literal to serve something else; nothing else has to change.

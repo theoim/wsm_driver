@@ -76,9 +76,22 @@ int ws_transport_accept(const void *vops, int listen_fd, uint32_t timeout_ms)
     socklen_t sl = sizeof(peer);
     int fd = s_ops->accept(listen_fd, (struct sockaddr *)&peer, &sl);
     if (fd < 0) {
-        return 0;                       /* nobody connected in time */
+        /* Only a receive timeout means "nobody connected". Anything else is a
+         * broken listening socket, and reporting it as a timeout would leave
+         * the caller polling a dead socket forever. The TOE wrapper is explicit
+         * about the difference -- EWOULDBLOCK on timeout, EINVAL on failure
+         * (wiztoe_wrap.c) -- so there is a real distinction to preserve. */
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 0;
+        }
+        ESP_LOGE(TAG, "accept failed: errno %d", errno);
+        return -1;
     }
     ESP_LOGI(TAG, "client connected from %s", inet_ntoa(peer.sin_addr));
+
+    /* 0 is the caller's "nobody yet" value, so an accepted fd must never be 0.
+     * It cannot be: lwIP descriptors start at LWIP_SOCKET_OFFSET, and the TOE
+     * wrapper adds that same offset to its 0..7 hardware socket numbers. */
     return fd;
 }
 

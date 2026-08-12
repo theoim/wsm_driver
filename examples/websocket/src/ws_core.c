@@ -570,7 +570,12 @@ int ws_poll(ws_conn_t *conn, uint32_t timeout_ms)
 
     case WS_OP_TEXT:
     case WS_OP_BINARY:
-        if (conn->offset > 0) {
+        /* Test frag_opcode, not offset. A fragmented message may legitimately
+         * have delivered no bytes yet -- an opening frame of FIN=0, length 0 is
+         * well formed -- and RFC 6455 5.4 allows only continuation frames until
+         * it finishes. Keying on offset would let a data frame past whenever the
+         * message so far happened to be empty, silently starting a second one. */
+        if (conn->frag_opcode >= 0) {
             ESP_LOGW(TAG, "new data frame while a message was still open");
             ws_close(conn, WS_CLOSE_PROTOCOL_ERROR, NULL);
             return -1;
@@ -600,12 +605,25 @@ int ws_poll(ws_conn_t *conn, uint32_t timeout_ms)
         break;                          /* unsolicited pong; nothing owed */
 
     case WS_OP_CLOSE: {
+        /* A close body is either empty or a 2-byte code followed by an optional
+         * reason. One byte cannot be either, so RFC 6455 7.1.6 makes it a
+         * protocol error rather than something to interpret. */
+        if (h.length == 1) {
+            ESP_LOGW(TAG, "close frame with a 1-byte body");
+            ws_close(conn, WS_CLOSE_PROTOCOL_ERROR, NULL);
+            return -1;
+        }
+
         uint16_t code = WS_CLOSE_NORMAL;
         if (h.length >= 2) {
             code = (uint16_t)((control[0] << 8) | control[1]);
         }
         ESP_LOGI(TAG, "client closed with code %u", code);
-        ws_close(conn, WS_CLOSE_NORMAL, NULL);
+
+        /* Echo the code back. RFC 6455 5.5.1 says a close reply SHOULD carry
+         * the code that was received; answering 1000 to a 1001 "going away"
+         * tells the peer's logs the wrong story about why the session ended. */
+        ws_close(conn, (ws_close_code_t)code, NULL);
         return -1;
     }
 

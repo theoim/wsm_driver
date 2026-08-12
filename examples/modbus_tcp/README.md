@@ -301,6 +301,16 @@ On this setup, with `esp_wifi_set_ps(WIFI_PS_NONE)` after `esp_wifi_start()`, th
 
 It is left at the default here because it costs idle current and most APs do not show the problem. Request/response protocols expose it more than streaming ones do — a browser reconnects and hides it, a Modbus master times out and reports a failure.
 
+## Known limits
+
+Worth knowing before this gets pointed at anything that matters. None of these are accidents; they are where the example stops.
+
+- **Timeouts are per read, not per session.** `REQUEST_TIMEOUT_MS` bounds one `recv`, so a peer that sends one byte just often enough keeps its session alive indefinitely. With one session per interface, that is enough to lock out every other master. A product server wants an absolute deadline on the whole ADU and an idle-session limit.
+- **`send()` has no deadline at all.** `mb_transport_send` loops until every byte is gone, and on the TOE backend `SO_SNDTIMEO` is accepted and then ignored — `wiztoe_send()` calls ioLibrary's blocking `send()` and never consults the stored timeout. A master that stops reading can therefore park the server task for as long as it likes. This one is in the component rather than the example, so the example cannot fix it.
+- **No authentication, no transport security.** Plain Modbus TCP on port 502: anyone who can reach the address can write every register. Modbus Security (MB/TCP over TLS) exists for the case where that is not acceptable.
+- **One master per interface**, for the reason in [Step 3](#one-master-at-a-time).
+- **Two independent slaves, not a redundant pair.** Each interface owns its own `mb_datastore_t`, so a register written over Ethernet is *not* visible over Wi-Fi. If you want one data model behind two interfaces, add a lock and share the struct — deliberately not done here, because the mutex would be the most interesting part of the example and it is not what the example is about.
+
 ## Appendix
 
 - **Widening the data model:** `MB_REG_COUNT` and `MB_COIL_COUNT` in `inc/mb_core.h`. Nothing else needs to change; the bounds checks and the exception replies follow from them.
