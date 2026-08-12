@@ -359,11 +359,54 @@ void wiztoe_socket_release(int sn)
     }
 }
 
+/* How long to wait for the peer to finish the FIN exchange before giving up on
+ * a graceful close. A peer on the same LAN answers in single-digit milliseconds;
+ * one that has vanished never will, and waiting longer buys nothing. */
+#define TOE_DISCONNECT_TIMEOUT_MS 500
+
+/*
+ * Close the TCP connection on `fd`, yielding while the peer completes the FIN
+ * exchange.
+ *
+ * This does by hand what ioLibrary's disconnect() does, for one reason: that
+ * function's wait for SOCK_CLOSED (Ethernet/socket.c) is a bare
+ *
+ *     while (getSn_SR(sn) != SOCK_CLOSED) { ... }
+ *
+ * with no yield in it. The loop is waiting on network round trips, not on
+ * register latency, so on a peer that closed abruptly -- a browser navigating
+ * away, a client that RSTs -- it can hold the CPU for as long as the FIN takes
+ * to never arrive. Called from a task at any priority above idle, that starves
+ * the idle task and trips the task watchdog. Yielding in 1 ms steps keeps the
+ * behaviour and returns the CPU, matching what wiztoe_recv/recvfrom already do.
+ *
+ * Also bounded: after TOE_DISCONNECT_TIMEOUT_MS the socket is left to the
+ * caller, which always follows with socket() or close() -- and both of those
+ * reset ioLibrary's per-socket bookkeeping (sock_is_sending, sock_io_mode,
+ * sock_remained_size), so bypassing disconnect() leaves nothing stale behind.
+ */
 static void toe_tcp_disconnect_if_connected(int fd)
 {
     uint8_t sr = getSn_SR((uint8_t)fd);
-    if (sr == SOCK_ESTABLISHED || sr == SOCK_CLOSE_WAIT)
-        disconnect((uint8_t)fd);
+    if (sr != SOCK_ESTABLISHED && sr != SOCK_CLOSE_WAIT)
+        return;
+
+    setSn_CR((uint8_t)fd, Sn_CR_DISCON);
+
+    /* The command latch clears in microseconds -- this one is register latency,
+     * not a network wait, so spinning on it is correct. */
+    while (getSn_CR((uint8_t)fd))
+        ;
+
+    uint32_t waited = 0;
+    while (getSn_SR((uint8_t)fd) != SOCK_CLOSED)
+    {
+        if (getSn_IR((uint8_t)fd) & Sn_IR_TIMEOUT)
+            break;                      /* the chip gave up on the peer */
+        if (++waited >= TOE_DISCONNECT_TIMEOUT_MS)
+            break;                      /* so do we */
+        toe_yield_1ms();
+    }
 }
 
 int wiztoe_close(int fd)
