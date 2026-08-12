@@ -1,0 +1,18 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# 1 ms tick: the TOE poll loops (wiztoe_recvfrom) yield in 1 ms steps and count
+# those steps for SO_RCVTIMEO/SO_SNDTIMEO. At the IDF default of 100 Hz a 1 ms
+# delay truncates to 0 ticks, which busy-waits and starves the idle task.
+CONFIG_FREERTOS_HZ=1000
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+# CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set
+# --- wsm_driver shared settings ---
+CONFIG_WSM_DRIVER_ENABLED=y
+CONFIG_WSM_DRIVER_BACKEND_TOE=y
+# The chip and its pins follow the board, so pick the board and leave both
+# alone: menuconfig -> Component config -> WIZnet WSM Driver -> Board. Setting
+# CONFIG_WSM_DRIVER_CHIP_* here would contradict whichever board is selected
+# and leave the driver talking to the wrong chip on the right pins.
+# For wiring no listed board covers, choose "Custom" -- that is the one setting
+# where the pin fields become editable.
