@@ -264,6 +264,14 @@ I (90642) esp_netif_handlers: sta ip: 192.168.11.8      <- 90 s later
 
 On this setup the gap ranged from 2 s to 173 s across reboots, with the antenna untouched and RSSI between -9 and -29 dBm. The cause is the default `WIFI_PS_MIN_MODEM` power save (the `wifi:pm start, type: 1` line) against an AP that buffers broadcast poorly: the station wakes on a listen interval of 307 ms scaled by a DTIM of 3, and a DHCP OFFER that misses that window waits for the next retry. Calling `esp_wifi_set_ps(WIFI_PS_NONE)` after `esp_wifi_start()` brought the same board to a steady 2.1-2.4 s. It is left at the default here because it costs idle current and most APs do not show the problem — this is worth knowing about, not worth changing for everyone.
 
+### The server stops answering after a browser was pointed at it
+
+Fixed here, and worth knowing about because it affects anything built on the TOE backend. `wiztoe_accept()` advances a hardware socket when it reads `SOCK_ESTABLISHED` and re-arms it when it reads `SOCK_CLOSED`. A client that connects and then drops without sending anything leaves the socket in `SOCK_CLOSE_WAIT`, which is neither, so `accept()` times out against it forever and that listening socket is gone. A browser closing a tab does exactly this.
+
+It was found in `examples/modbus_tcp`, where six connect-and-close cycles took the server out for more than ten seconds and sustained load fell from 120 of 120 requests served to 32 of 120 as listeners died one at a time. The same shape is here, so the same workaround is: a listener that has been silent for a couple of seconds is rebuilt, which costs a socket open on an idle server and is the only escape from the wedged case.
+
+The real fix belongs in `wiztoe_accept()`, which should treat `SOCK_CLOSE_WAIT` the way it treats `SOCK_CLOSED`.
+
 ## Known limits
 
 Worth knowing before this gets pointed at anything that matters. None of these are accidents; they are where the example stops.

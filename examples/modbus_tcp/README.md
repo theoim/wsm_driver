@@ -105,12 +105,20 @@ Same layout as `examples/loopback`:
 
 | Path | Role |
 |------|------|
-| `inc/net_config.h` | network identity, ports |
+| `inc/net_config.h` | factory defaults: network identity, ports |
 | `inc/mb_core.h` · `src/mb_core.c` | the data model and the PDU executor |
+| `inc/mb_store.h` · `src/mb_store.c` | that model shared with the web UI, under a lock, plus the counters |
 | `inc/mb_transport.h` · `src/mb_transport.c` | the network seam |
 | `src/mb_server.c` | one session: MBAP framing, execute, reply |
+| `inc/app_config.h` · `src/app_config.c` | runtime settings in NVS, and what makes one valid |
+| `inc/app_control.h` · `src/app_control.c` | applying a change without cutting off the reply that announced it |
+| `inc/web_server.h` · `src/web_server.c` | the dashboard and the settings API |
+| `inc/web_page.h` | the page, as a string literal |
 | `main/main.c` | orchestration only: bring interfaces up, start the tasks |
 | `tools/mb_probe.py` | a dependency-free master that checks every function code |
+| `tools/web_probe.py` | the HTTP API, and ten ways a settings POST must be refused |
+| `tools/abuse.py` | clients that misbehave, and whether the device still serves afterwards |
+| `tools/soak.py` | the whole mix for as long as you like, reporting heap and failures |
 
 `mb_core.c` touches no socket, no timer and no UART. `mb_pdu_execute()` is a pure function over a caller-owned `mb_datastore_t` — hand it a request PDU, get a response PDU back — which is what makes it identical on both network backends and testable on a host. Only `mb_transport.c` includes lwIP, and it calls the component's `net_sock_ops_t` vtable, so the same server runs on the WIZnet hardware sockets or on the software LwIP behind the Wi-Fi netif.
 
@@ -273,6 +281,35 @@ mbpoll -m tcp -p 5020 -a 1 -r 1 -c 10 192.168.11.8
 
 Leave a master polling over Ethernet while you do it. Both stay up, and the log prefix says which one is talking. That is the whole point of the example: identical protocol code driving WIZnet hardware sockets and software LwIP at the same time, differing only in the socket vtable each connection carries.
 
+### The web UI
+
+Open **http://192.168.11.2** while the Modbus server runs. The page shows what the server is doing, what is in its registers, and lets the network settings be changed without a toolchain.
+
+The register view is the one worth leaving open while a master polls: values that moved since the last second are highlighted, so "is the master writing where I think it is" becomes a question you answer by looking rather than by adding a print.
+
+| Endpoint | Does |
+|---|---|
+| `GET /` | the page |
+| `GET /api/status` | state, counters, PHY link, MAC, free heap, uptime |
+| `GET /api/registers` | all four tables |
+| `GET /api/config` | the current IP, mask, gateway and Modbus port |
+| `POST /api/config` | change any of those; fields left out keep their value |
+
+```bash
+python tools/web_probe.py 192.168.11.2            # read endpoints and every refusal
+python tools/web_probe.py 192.168.11.2 --apply    # plus a real port change and back
+```
+
+**One data model, not two.** The Modbus server and the page read the same registers under one lock, held for the length of a PDU or a snapshot copy and never across a socket call — a master that stops reading mid-response must not be able to stall the page. `web_probe.py` proves the sharing rather than assuming it: it writes a register over Modbus and reads it back over HTTP.
+
+**Settings are saved, answered, then applied — in that order.** Applying a new address tears down the sockets the request arrived on, so doing it inside the handler would kill the connection before the reply left the device and the user would never learn the new address. The handler validates, writes NVS and responds; a separate task does the work a moment later. The reply carries the new address so the page can offer it as a link.
+
+Validation refuses what cannot work and says which field is wrong: an address that is not an address, loopback or multicast, a mask with a hole in it, a gateway outside its own subnet, a port of 0, and port 80 — the web UI's own, which is the way back in when the rest has been set to something unreachable and therefore not settable from the page it serves.
+
+**The Modbus port and the IP survive a reboot.** They live in NVS behind a magic and a version; anything missing, corrupt or from an older layout falls back to `net_config.h` rather than to zeros, because a device that boots on 0.0.0.0 after a bad write is a device that needs a cable.
+
+**Wi-Fi keeps its own data model** and is not configurable from the page. Sharing one store across both interfaces would make it a synchronising point between two stacks, which is a different example; the page reports the Ethernet side, which is the one it can configure.
+
 ## Troubleshooting
 
 ### `listen(502) failed: errno 95`, right after a version mismatch
@@ -301,13 +338,41 @@ On this setup, with `esp_wifi_set_ps(WIFI_PS_NONE)` after `esp_wifi_start()`, th
 
 It is left at the default here because it costs idle current and most APs do not show the problem. Request/response protocols expose it more than streaming ones do — a browser reconnects and hides it, a Modbus master times out and reports a failure.
 
+### The server stops answering after a browser was pointed at it
+
+Fixed here, and worth knowing about because it affects anything built on the TOE backend.
+
+`wiztoe_accept()` advances a hardware socket when it reads `SOCK_ESTABLISHED` and re-arms it when it reads `SOCK_CLOSED`. A client that connects and then drops without sending anything leaves the socket in `SOCK_CLOSE_WAIT`, which is neither, so `accept()` times out against it forever and that listening socket is gone. A browser closing a tab does exactly this.
+
+Measured before the workaround: six connect-and-close cycles took the Modbus server out for more than ten seconds, thirty rapid sessions kept it out, and on the web side — three listeners, three chances — sustained load fell from 120 of 120 requests served to 32 of 120 as the listeners died one at a time.
+
+Both servers now rebuild a listener that has been silent for about two seconds. That costs a socket open and a listen on an idle server, which is nothing, and it is the only escape from the wedged case. `tools/abuse.py` covers it.
+
+The real fix belongs in `wiztoe_accept()`, which should treat `SOCK_CLOSE_WAIT` the way it treats `SOCK_CLOSED`.
+
+## Testing it properly
+
+Three tools, in the order worth running them:
+
+```bash
+python tools/mb_probe.py 192.168.11.2      # the protocol: 8 function codes, 3 exceptions
+python tools/web_probe.py 192.168.11.2     # the API and the refusals
+python tools/abuse.py 192.168.11.2         # clients behaving badly, then recovery
+python tools/soak.py 192.168.11.2 --minutes 30
+```
+
+`abuse.py` and `soak.py` exist because the failures that mattered here were not visible in the code. They needed the board, a client behaving badly, and enough time for the damage to accumulate: a mask check that rejected `255.255.255.0` and so masked the gateway and port checks behind it; an accept timeout that set the response latency at 430 ms and refused 261 of 300 requests under load; a byte-at-a-time read costing an SPI round trip per byte; and the CLOSE_WAIT case above, which only appeared as a slow decline across hundreds of requests.
+
+`soak.py` reports free heap and its low-water mark once a minute rather than a total at the end, because a leak is a trend and a total hides it. Eight minutes of the full mix: 1478 of 1478 web requests, 739 of 739 Modbus, heap flat at 351 KB, low-water mark unmoved across 25 sessions.
+
 ## Known limits
 
 Worth knowing before this gets pointed at anything that matters. None of these are accidents; they are where the example stops.
 
 - **Timeouts are per read, not per session.** `REQUEST_TIMEOUT_MS` bounds one `recv`, so a peer that sends one byte just often enough keeps its session alive indefinitely. With one session per interface, that is enough to lock out every other master. A product server wants an absolute deadline on the whole ADU and an idle-session limit.
 - **`send()` has no deadline at all.** `mb_transport_send` loops until every byte is gone, and on the TOE backend `SO_SNDTIMEO` is accepted and then ignored — `wiztoe_send()` calls ioLibrary's blocking `send()` and never consults the stored timeout. A master that stops reading can therefore park the server task for as long as it likes. This one is in the component rather than the example, so the example cannot fix it.
-- **No authentication, no transport security.** Plain Modbus TCP on port 502: anyone who can reach the address can write every register. Modbus Security (MB/TCP over TLS) exists for the case where that is not acceptable.
+- **No authentication, no transport security.** Plain Modbus TCP on port 502 and plain HTTP on 80: anyone who can reach the address can write every register *and change the device's IP*. The web UI widens what an unauthenticated peer can do, which is the trade it makes for being usable without a toolchain — on a segment where that is not acceptable, do not build it in. Modbus Security (MB/TCP over TLS) exists for the protocol side.
+- **A settings change can be saved without being applied.** If a master stops reading mid-response the Modbus task is stuck inside a send that has no deadline, so it cannot be stopped, and the new port lands at the next reboot instead. The dashboard says so rather than letting NVS and the running device disagree quietly.
 - **One master per interface**, for the reason in [Step 3](#one-master-at-a-time).
 - **Two independent slaves, not a redundant pair.** Each interface owns its own `mb_datastore_t`, so a register written over Ethernet is *not* visible over Wi-Fi. If you want one data model behind two interfaces, add a lock and share the struct — deliberately not done here, because the mutex would be the most interesting part of the example and it is not what the example is about.
 

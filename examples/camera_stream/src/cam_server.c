@@ -80,6 +80,31 @@ static const char *TAG = "cam_server";
 /* Pause before rebuilding a listening socket that failed, so a persistent fault
  * logs at a readable rate instead of filling the console. */
 #define LISTEN_RETRY_MS     1000
+
+/*
+ * Consecutive empty accepts after which the listening socket is rebuilt.
+ *
+ * Works around a state the TOE backend does not leave on its own.
+ * wiztoe_accept() advances a hardware socket when it reads SOCK_ESTABLISHED and
+ * re-arms it when it reads SOCK_CLOSED, but a client that connects and then
+ * drops without sending anything leaves the socket in SOCK_CLOSE_WAIT --
+ * neither case -- so accept() times out against it indefinitely and that
+ * listener is gone for good.
+ *
+ * A browser closing a tab does exactly this. Measured in examples/modbus_tcp,
+ * where the same shape took the server out for more than ten seconds after six
+ * connect-and-close cycles, and kept it out under a client that retried
+ * quickly. Rebuilding an idle listener costs a socket open and a listen.
+ *
+ * The real fix belongs in wiztoe_accept(), which should treat SOCK_CLOSE_WAIT
+ * the way it treats SOCK_CLOSED.
+ *
+ * Counted in passes rather than milliseconds, because a pass is 20 ms when idle
+ * and a frame time when streaming. The wall-clock interval is therefore loose
+ * on purpose: what matters is that a wedged listener is eventually rebuilt, not
+ * that it happens on a schedule.
+ */
+#define RECYCLE_AFTER       200
 #define REQUEST_TIMEOUT_MS  2000
 #define REQUEST_BUF_SIZE    512
 
@@ -436,6 +461,7 @@ static void cam_server_task(void *arg)
     }
 
     int listen_fds[HTTP_MAX_LISTENERS];
+    int idle_passes[HTTP_MAX_LISTENERS] = {0};
     int listeners = http_listen_pool(c->ops, c->port, c->listeners, listen_fds);
     if (listeners == 0) {
         ESP_LOGE(TAG, "[%s] cannot listen on %u", c->name, c->port);
@@ -470,9 +496,21 @@ static void cam_server_task(void *arg)
 
             int fd = http_accept(c->ops, listen_fds[i], accept_ms);
             if (fd > 0) {
+                idle_passes[i] = 0;
                 slot->fd = fd;
                 slot->state = SLOT_REQUEST;
-            } else if (fd < 0) {
+            } else if (fd == 0) {
+                /* An idle listener and one stuck in CLOSE_WAIT look identical
+                 * from here; rebuilding costs a socket open and is the only
+                 * escape from the second. */
+                if (++idle_passes[i] >= RECYCLE_AFTER) {
+                    idle_passes[i] = 0;
+                    http_close(c->ops, listen_fds[i]);
+                    int again[1];
+                    listen_fds[i] = (http_listen_pool(c->ops, c->port, 1, again) == 1)
+                                        ? again[0] : -1;
+                }
+            } else {
                 ESP_LOGE(TAG, "[%s] listener %d failed, reopening", c->name, i);
                 http_close(c->ops, listen_fds[i]);
                 listen_fds[i] = -1;

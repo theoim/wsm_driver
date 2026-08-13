@@ -207,6 +207,8 @@ Ethernet, TOE backend, JPEG quality 12, one browser-equivalent client polling st
 | 640 x 480 | 23.5 KB | 25.3 fps | 4.80 Mbps |
 | 800 x 600 | 32.0 KB | 18.3 fps | 4.69 Mbps |
 
+> **These are end-to-end numbers, and part of what they measure is the client.** A later run under different lighting produced much smaller frames and *lower* frame rates — 3.6 KB at 17 fps against 14.4 KB at 24 fps, which is backwards for a link that is the bottleneck. The reported `send_ms` is the time until the peer drained the socket, so a client that falls behind shows up as slow sending. The device is not the limit at these rates; treat the table as "this setup reached at least this", not as the chip's ceiling, and measure with a client you have profiled before quoting a maximum.
+
 Those numbers are the reason the charts exist, and getting them right took one fix worth repeating. The first working version ran VGA at 14.5 fps, and the missing time was not the sensor or the link — each idle listener was being offered a 20 ms accept window once per frame, and with two idle listeners that is 40 ms of dead time the stream paid for:
 
 ```
@@ -262,6 +264,14 @@ The status poll is not getting through, which on the TOE means the listeners are
 ### The stream stutters when a control is changed
 
 Expected, and it is the sensor rather than the network. Changing resolution or XCLK tears the camera driver down and rebuilds it — esp32-camera fixes its DMA layout at init — which takes a few hundred milliseconds with the frame lock held. JPEG quality is the one control that applies live.
+
+### The server stops answering after a browser was pointed at it
+
+Fixed here, and worth knowing about because it affects anything built on the TOE backend. `wiztoe_accept()` advances a hardware socket when it reads `SOCK_ESTABLISHED` and re-arms it when it reads `SOCK_CLOSED`. A client that connects and then drops without sending anything leaves the socket in `SOCK_CLOSE_WAIT`, which is neither, so `accept()` times out against it forever and that listening socket is gone. A browser closing a tab does exactly this.
+
+It was found in `examples/modbus_tcp`, where six connect-and-close cycles took the server out for more than ten seconds and sustained load fell from 120 of 120 requests served to 32 of 120 as listeners died one at a time. The same shape is here, so the same workaround is: a listener that has been silent for a couple of seconds is rebuilt, which costs a socket open on an idle server and is the only escape from the wedged case.
+
+The real fix belongs in `wiztoe_accept()`, which should treat `SOCK_CLOSE_WAIT` the way it treats `SOCK_CLOSED`.
 
 ## Known limits
 

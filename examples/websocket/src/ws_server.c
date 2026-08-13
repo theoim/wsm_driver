@@ -23,14 +23,35 @@
 static const char *TAG = "ws_server";
 
 /* How long accept() and ws_poll() block before returning to the loop. Long
- * enough that an idle server is not spinning, short enough that a shutdown or
- * a log line is not stuck behind it. */
-#define ACCEPT_TIMEOUT_MS  1000
+ * enough that an idle server is not spinning, short enough that a log line is
+ * not stuck behind it -- and, for accept, short enough that a listener wedged
+ * in CLOSE_WAIT is rebuilt within a couple of seconds. See RECYCLE_AFTER. */
+#define ACCEPT_TIMEOUT_MS  200
 #define POLL_TIMEOUT_MS    1000
 
 /* Pause before rebuilding a listening socket that failed, so a persistent fault
  * logs at a readable rate instead of filling the console. */
 #define LISTEN_RETRY_MS    1000
+
+/*
+ * Consecutive empty accepts after which the listening socket is rebuilt.
+ *
+ * Works around a state the TOE backend does not leave on its own.
+ * wiztoe_accept() advances a hardware socket when it reads SOCK_ESTABLISHED and
+ * re-arms it when it reads SOCK_CLOSED, but a client that connects and then
+ * drops without sending anything leaves the socket in SOCK_CLOSE_WAIT --
+ * neither case -- so accept() times out against it indefinitely and that
+ * listener is gone for good.
+ *
+ * A browser closing a tab does exactly this. Measured in examples/modbus_tcp,
+ * where the same shape took the server out for more than ten seconds after six
+ * connect-and-close cycles, and kept it out under a client that retried
+ * quickly. Rebuilding an idle listener costs a socket open and a listen.
+ *
+ * The real fix belongs in wiztoe_accept(), which should treat SOCK_CLOSE_WAIT
+ * the way it treats SOCK_CLOSED.
+ */
+#define RECYCLE_AFTER      10      /* x 200 ms = 2 s of silence */
 
 typedef struct {
     const char *name;
@@ -139,11 +160,26 @@ static void ws_server_task(void *arg)
     }
     ESP_LOGI(TAG, "[%s] WebSocket server on port %u", c->name, c->port);
 
+    int idle_passes = 0;
+
     for (;;) {
         int fd = ws_transport_accept(c->ops, listen_fd, ACCEPT_TIMEOUT_MS);
         if (fd == 0) {
+            /* An idle server and a listener stuck in CLOSE_WAIT look identical
+             * from here, so rebuild after a while: free in the first case, and
+             * the only way out of the second. */
+            if (++idle_passes >= RECYCLE_AFTER) {
+                idle_passes = 0;
+                ws_transport_close(c->ops, listen_fd);
+                listen_fd = ws_transport_listen(c->ops, c->port);
+                if (listen_fd < 0) {
+                    ESP_LOGE(TAG, "[%s] listener did not come back", c->name);
+                    goto done;
+                }
+            }
             continue;                   /* nobody yet */
         }
+        idle_passes = 0;
         if (fd < 0) {
             /* The listening socket itself failed, so polling it again would
              * spin on the same error. Rebuild it rather than ending the task:

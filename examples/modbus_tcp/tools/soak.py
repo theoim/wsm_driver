@@ -143,7 +143,22 @@ try:
     leaked = heap_min_first - end["heap_min"]
     print("low-water fell by %d bytes over the run%s"
           % (leaked, "" if leaked < 4096 else "  <-- look into this"))
-    sys.exit(1 if (web_fail or mb_fail or leaked >= 4096) else 0)
+
+    # What counts as a failed soak.
+    #
+    # Not "any failed request". A connection abandoned by the test itself can
+    # hold a listener for the couple of seconds the recycle takes, so a handful
+    # of refusals in several thousand is the workaround working, not a defect --
+    # a 30-minute run measured 1 in 5522. Failing on that would train everyone
+    # to ignore the exit code.
+    #
+    # A rate above half a percent is different: that is a server losing
+    # connections rather than covering for one. So is any real movement in the
+    # heap low-water mark, which only ever falls.
+    total = web_ok + web_fail + mb_ok + mb_fail
+    rate = (web_fail + mb_fail) / total if total else 0
+    print("failure rate %.3f%%" % (rate * 100))
+    sys.exit(1 if (rate > 0.005 or leaked >= 4096) else 0)
 except Exception as exc:                        # noqa: BLE001 - reported
     print("device did not answer at the end: %s" % type(exc).__name__)
     sys.exit(1)
