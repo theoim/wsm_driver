@@ -106,6 +106,8 @@ static const char WEB_INDEX_PAGE[] =
 "      <dt>Requests</dt><dd id='s-req'>-</dd>\n"
 "      <dt>Exceptions</dt><dd id='s-exc'>-</dd>\n"
 "      <dt>Last function</dt><dd id='s-last'>-</dd>\n"
+"      <dt>Uptime</dt><dd id='s-up'>-</dd>\n"
+"      <dt>Free heap</dt><dd id='s-heap'>-</dd>\n"
 "    </dl>\n"
 "  </section>\n"
 "  <section class='card'>\n"
@@ -148,6 +150,13 @@ static const char WEB_INDEX_PAGE[] =
 "  $('dot-t').textContent=text;\n"
 "}\n"
 
+"function uptime(sec){\n"
+"  var d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600);\n"
+"  var m=Math.floor(sec%3600/60);\n"
+"  if(d){return d+'d '+h+'h'}\n"
+"  if(h){return h+'h '+m+'m'}\n"
+"  return m+'m '+(sec%60)+'s';\n"
+"}\n"
 "function fn(code){\n"
 "  var m={1:'01 Read Coils',2:'02 Read Discrete',3:'03 Read Holding',\n"
 "    4:'04 Read Input',5:'05 Write Coil',6:'06 Write Register',\n"
@@ -172,6 +181,11 @@ static const char WEB_INDEX_PAGE[] =
 "    $('s-exc').textContent=s.exceptions\n"
 "      +(s.last_exception?(' (last 0x0'+s.last_exception+')'):'');\n"
 "    $('s-last').textContent=fn(s.last_function);\n"
+"    $('s-up').textContent=uptime(s.uptime);\n"
+/* Both numbers, because the low-water mark is the one that reveals a leak: free
+   heap moves with every request, the minimum only ever falls. */
+"    $('s-heap').textContent=(s.heap/1024).toFixed(0)+' KB (min '\n"
+"      +(s.heap_min/1024).toFixed(0)+')';\n"
 /* Saved but not running. The two diverge when a stuck master keeps the Modbus
    task from stopping, and a device that quietly waits for a reboot to change
    its port is one nobody will think to check. */

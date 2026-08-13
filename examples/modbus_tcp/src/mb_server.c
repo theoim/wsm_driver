@@ -22,10 +22,11 @@
 static const char *TAG = "mb_server";
 
 /* How long accept() and the request read block before returning to the loop.
- * Long enough that an idle server is not spinning, short enough that a log line
- * is not stuck behind it. A Modbus master may sit silent between polls, so the
- * request timeout must not be mistaken for a dead connection. */
-#define ACCEPT_TIMEOUT_MS   1000
+ * A Modbus master may sit silent between polls, so the request timeout must not
+ * be mistaken for a dead connection. The accept timeout is short so that a
+ * listener wedged in CLOSE_WAIT is rebuilt within a couple of seconds and
+ * mb_server_stop() is acted on promptly. */
+#define ACCEPT_TIMEOUT_MS   200
 #define REQUEST_TIMEOUT_MS  1000
 
 /* Pause before rebuilding a listening socket that failed, so a persistent fault
@@ -36,6 +37,22 @@ static const char *TAG = "mb_server";
  * other holder is a snapshot copy of ~400 bytes; if it ever times out something
  * is wrong rather than merely busy. */
 #define STORE_TIMEOUT_MS    500
+
+/*
+ * Consecutive empty accepts after which the listener is rebuilt.
+ *
+ * The same TOE limitation the web server works around, and this server is more
+ * exposed to it because it has only one listener: wiztoe_accept() advances on
+ * SOCK_ESTABLISHED and re-arms on SOCK_CLOSED, but a client that connects and
+ * drops leaves the socket in SOCK_CLOSE_WAIT, which is neither, so accept()
+ * times out against it indefinitely.
+ *
+ * Measured before this: six connect-and-close cycles took the server out for
+ * more than ten seconds, and thirty rapid sessions -- a master with a short
+ * retry timer -- kept it there. Rebuilding an idle listener costs a socket open
+ * and a listen.
+ */
+#define RECYCLE_AFTER       10      /* x 200 ms = 2 s of nothing arriving */
 
 struct mb_server {
     const char  *name;
@@ -165,11 +182,27 @@ static void mb_server_task(void *arg)
         mb_store_note_running(c->store, true);
     }
 
+    int idle_passes = 0;
+
     while (!c->stop) {
         int fd = mb_transport_accept(c->ops, listen_fd, ACCEPT_TIMEOUT_MS);
         if (fd == 0) {
+            /* Nothing arrived -- an idle server and a listener wedged in
+             * CLOSE_WAIT look identical from here, so rebuild after a while.
+             * Free when it is the first, and the only way out when it is the
+             * second. */
+            if (++idle_passes >= RECYCLE_AFTER) {
+                idle_passes = 0;
+                mb_transport_close(c->ops, listen_fd);
+                listen_fd = mb_transport_listen(c->ops, c->port);
+                if (listen_fd < 0) {
+                    ESP_LOGE(TAG, "[%s] listener did not come back", c->name);
+                    goto done;
+                }
+            }
             continue;                   /* nobody yet, or time to re-check stop */
         }
+        idle_passes = 0;
         if (fd < 0) {
             /* The listening socket itself failed, so polling it again would
              * spin on the same error. Rebuild it rather than ending the task:

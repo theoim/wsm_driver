@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_system.h"      /* esp_get_free_heap_size */
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -180,7 +181,8 @@ static int build_status(const mb_snapshot_t *snap, char *body, size_t size)
         "\"running\":%s,\"client\":%s,\"pending\":%s,"
         "\"requests\":%u,\"exceptions\":%u,\"sessions\":%u,"
         "\"last_function\":%u,\"last_exception\":%u,"
-        "\"regs\":%d,\"coils\":%d}",
+        "\"regs\":%d,\"coils\":%d,"
+        "\"heap\":%u,\"heap_min\":%u,\"uptime\":%u}",
         ip, mask, gw, cfg.modbus_port,
         ni.mac[0], ni.mac[1], ni.mac[2], ni.mac[3], ni.mac[4], ni.mac[5],
         link ? "true" : "false",
@@ -190,7 +192,14 @@ static int build_status(const mb_snapshot_t *snap, char *body, size_t size)
         (unsigned)snap->stats.requests, (unsigned)snap->stats.exceptions,
         (unsigned)snap->stats.sessions,
         snap->stats.last_function, snap->stats.last_exception,
-        MB_REG_COUNT, MB_COIL_COUNT);
+        MB_REG_COUNT, MB_COIL_COUNT,
+        /* Free heap now and the low-water mark since boot. The pair is what
+         * makes a leak visible: free heap alone bounces around with every
+         * request, while the minimum only ever falls, so a device that has been
+         * up for a week says plainly whether it has been losing memory. */
+        (unsigned)esp_get_free_heap_size(),
+        (unsigned)esp_get_minimum_free_heap_size(),
+        (unsigned)(esp_timer_get_time() / 1000000));
 }
 
 /*
