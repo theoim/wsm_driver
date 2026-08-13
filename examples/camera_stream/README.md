@@ -70,9 +70,21 @@ Three settings in `sdkconfig.defaults`, all of them load-bearing:
 
 | Setting | Why |
 |---|---|
-| `CONFIG_SPIRAM=y` + `CONFIG_SPIRAM_MODE_OCT=y` | The frame buffers live in PSRAM. The XIAO carries **octal** PSRAM; a quad setting fails to detect it and the camera then fails with `ESP_ERR_NO_MEM`, which does not name the real cause. |
-| `CONFIG_ESPTOOLPY_FLASHSIZE_8MB` + a 3 MB app partition | esp32-camera plus the Wi-Fi stack overruns the stock 1 MB partition. |
-| `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` | Frees GPIO43/44 for the WIZnet reset and interrupt lines. |
+| `CONFIG_SPIRAM=y` + `CONFIG_SPIRAM_MODE_OCT=y` | **The hard requirement.** The frame buffers live in PSRAM, and both boards below carry the octal kind; a quad setting fails to detect octal PSRAM and the camera then fails with `ESP_ERR_NO_MEM`, which does not name the real cause. |
+| `CONFIG_ESPTOOLPY_FLASHSIZE_8MB` + a 3 MB app partition | Room, not necessity — the image is about 800 KB with Wi-Fi on, so the stock 1 MB partition would in fact hold it. On a 16 MB board raise the flash size to match, or the bootloader logs a warning about the part being larger than the header says. |
+| `CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y` | Frees GPIO43/44 for the WIZnet reset and interrupt lines on a XIAO. |
+
+### Which boards this runs on
+
+PSRAM is what decides it, and it is not negotiable — a sensor frame does not fit in internal RAM at any useful size.
+
+| Board | Flash | PSRAM | This example |
+|---|---|---|---|
+| WIZnet ESP32-W5500 / W6300 Dev-kit | 16 MB | 8 MB octal | yes |
+| Seeed XIAO ESP32-S3 Sense | 8 MB | 8 MB octal | yes |
+| WIZnet ESP32 SoM | 2 MB | **none** | no |
+
+The SoM runs `examples/websocket` and `examples/modbus_tcp` comfortably — both are around 350 KB, or 800 KB with Wi-Fi — but it cannot run this one, and no amount of configuration changes that.
 
 A correct boot says so:
 
