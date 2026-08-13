@@ -3,7 +3,11 @@ idf_component_register(
         "main.c"
         "../src/mb_core.c"
         "../src/mb_server.c"
+        "../src/mb_store.c"
         "../src/mb_transport.c"
+        "../src/app_config.c"
+        "../src/app_control.c"
+        "../src/web_server.c"
     INCLUDE_DIRS
         "."
         "../inc"
@@ -13,6 +17,7 @@ idf_component_register(
         nvs_flash
         esp_netif
         esp_event
+        esp_timer
         lwip
 )
 

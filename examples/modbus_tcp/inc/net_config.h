@@ -34,4 +34,15 @@
 #define MB_PORT               502     /* Ethernet */
 #define WIFI_MB_PORT          5020    /* Wi-Fi    */
 
+/* ---- web UI ----
+ * The dashboard and the settings page. Fixed rather than configurable on
+ * purpose: it is the way back in when the Modbus port or the IP has been set to
+ * something unreachable, so it must not be settable from the page it serves. */
+#define WEB_PORT              80
+
+/* The values above are the FACTORY defaults. Once the web UI has saved a
+ * configuration, NVS supplies the IP, mask, gateway and Modbus port instead --
+ * see app_config.h. Erasing NVS, or a stored blob that fails validation, brings
+ * these back. */
+
 #endif /* NET_CONFIG_H */

@@ -16,6 +16,7 @@
 
 #include "mb_core.h"
 #include "mb_server.h"
+#include "mb_store.h"
 #include "mb_transport.h"
 
 static const char *TAG = "mb_server";
@@ -31,12 +32,27 @@ static const char *TAG = "mb_server";
  * logs at a readable rate instead of filling the console. */
 #define LISTEN_RETRY_MS     1000
 
-typedef struct {
-    const char *name;
-    const void *ops;
-    uint16_t    port;
-    bool      (*is_up)(void);
-} mb_server_ctx_t;
+/* How long a request will wait for the data model. Generous, because the only
+ * other holder is a snapshot copy of ~400 bytes; if it ever times out something
+ * is wrong rather than merely busy. */
+#define STORE_TIMEOUT_MS    500
+
+struct mb_server {
+    const char  *name;
+    const void  *ops;
+    uint16_t     port;
+    mb_store_t  *store;
+    bool       (*is_up)(void);
+
+    /* Set by mb_server_stop(), read by the task once per accept timeout. A
+     * plain bool rather than an event group: the task already wakes every
+     * ACCEPT_TIMEOUT_MS, so there is nothing to signal it with that it is not
+     * about to notice anyway. */
+    volatile bool stop;
+    volatile bool finished;
+};
+
+typedef struct mb_server mb_server_ctx_t;
 
 /*
  * Read one ADU, execute it, write the reply.
@@ -46,7 +62,7 @@ typedef struct {
  * guess how much is in flight or resynchronise on a stream that got out of step.
  */
 static int serve_request(const char *name, const void *ops, int fd,
-                         mb_datastore_t *ds)
+                         mb_store_t *store)
 {
     uint8_t adu[MB_ADU_MAX];
 
@@ -85,8 +101,25 @@ static int serve_request(const char *name, const void *ops, int fd,
         return -1;
     }
 
+    /* The lock covers the execution only. Everything before it was reading the
+     * socket and everything after is writing to it, and holding a mutex across
+     * either would let one slow master stall the web UI's poll. */
+    mb_datastore_t *ds = mb_store_acquire(store, STORE_TIMEOUT_MS);
+    if (ds == NULL) {
+        /* Drop the connection rather than the request. The ADU has already been
+         * read off the socket, so returning 0 would leave the master waiting
+         * for a reply that is never coming while the stream carries on -- and
+         * its next request would then be answered with this one's transaction
+         * id. Closing makes the failure obvious and the master reconnects. */
+        ESP_LOGE(TAG, "[%s] data model busy; closing the session", name);
+        return -1;
+    }
     uint8_t resp_pdu[MB_PDU_MAX];
     size_t resp_len = mb_pdu_execute(ds, adu + MB_MBAP_LEN, pdu_len, resp_pdu);
+    mb_store_release(store);
+
+    mb_store_note_request(store, adu[MB_MBAP_LEN],
+                          (resp_pdu[0] & 0x80) ? resp_pdu[1] : 0);
 
     if (resp_pdu[0] & 0x80) {
         ESP_LOGW(TAG, "[%s] function 0x%02X refused: exception 0x%02X",
@@ -116,31 +149,26 @@ static void mb_server_task(void *arg)
 {
     mb_server_ctx_t *c = (mb_server_ctx_t *)arg;
 
-    mb_datastore_t *ds = malloc(sizeof(*ds));
-    if (ds == NULL) {
-        ESP_LOGE(TAG, "[%s] out of memory for the data model", c->name);
-        free(c);
-        vTaskDelete(NULL);
-        return;
-    }
-    mb_datastore_init(ds);
-
     ESP_LOGI(TAG, "[%s] waiting for link...", c->name);
-    while (!c->is_up()) {
+    while (!c->is_up() && !c->stop) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    int listen_fd = mb_transport_listen(c->ops, c->port);
-    if (listen_fd < 0) {
-        ESP_LOGE(TAG, "[%s] cannot listen on %u", c->name, c->port);
-        goto done;
+    int listen_fd = -1;
+    if (!c->stop) {
+        listen_fd = mb_transport_listen(c->ops, c->port);
+        if (listen_fd < 0) {
+            ESP_LOGE(TAG, "[%s] cannot listen on %u", c->name, c->port);
+            goto done;
+        }
+        ESP_LOGI(TAG, "[%s] Modbus TCP server on port %u", c->name, c->port);
+        mb_store_note_running(c->store, true);
     }
-    ESP_LOGI(TAG, "[%s] Modbus TCP server on port %u", c->name, c->port);
 
-    for (;;) {
+    while (!c->stop) {
         int fd = mb_transport_accept(c->ops, listen_fd, ACCEPT_TIMEOUT_MS);
         if (fd == 0) {
-            continue;                   /* nobody yet */
+            continue;                   /* nobody yet, or time to re-check stop */
         }
         if (fd < 0) {
             /* The listening socket itself failed, so polling it again would
@@ -149,7 +177,11 @@ static void mb_server_task(void *arg)
              * one from the outside, and only a reboot would recover it. */
             ESP_LOGE(TAG, "[%s] accept failed, reopening the listener", c->name);
             mb_transport_close(c->ops, listen_fd);
+            listen_fd = -1;
             vTaskDelay(pdMS_TO_TICKS(LISTEN_RETRY_MS));
+            if (c->stop) {
+                break;
+            }
 
             listen_fd = mb_transport_listen(c->ops, c->port);
             if (listen_fd < 0) {
@@ -162,10 +194,18 @@ static void mb_server_task(void *arg)
         }
 
         ESP_LOGI(TAG, "[%s] session open", c->name);
-        while (serve_request(c->name, c->ops, fd, ds) == 0) {
+        mb_store_note_client(c->store, true);
+
+        /* The stop flag is checked between requests rather than only between
+         * sessions. A Modbus master holds one connection for as long as it
+         * likes, so waiting for the session to end could mean waiting forever,
+         * and a port change would appear to hang. */
+        while (!c->stop && serve_request(c->name, c->ops, fd, c->store) == 0) {
             /* Modbus TCP keeps the connection open across polls; a master may
              * issue thousands of requests on one socket. */
         }
+
+        mb_store_note_client(c->store, false);
         ESP_LOGI(TAG, "[%s] session closed", c->name);
 
         /* Closing an accepted connection is also what re-arms the listener on
@@ -173,29 +213,67 @@ static void mb_server_task(void *arg)
         mb_transport_close(c->ops, fd);
     }
 
-    mb_transport_close(c->ops, listen_fd);
-
 done:
-    free(ds);
-    free(c);
+    if (listen_fd >= 0) {
+        mb_transport_close(c->ops, listen_fd);
+    }
+    mb_store_note_running(c->store, false);
+    ESP_LOGI(TAG, "[%s] stopped", c->name);
+
+    /* The handle outlives the task by design: mb_server_stop() is waiting on
+     * this flag and frees it, so the task must not. */
+    c->finished = true;
     vTaskDelete(NULL);
 }
 
-void mb_server_start(const char *name, const void *ops, uint16_t port,
-                     bool (*is_up)(void))
+mb_server_t *mb_server_start(const char *name, const void *ops, uint16_t port,
+                             mb_store_t *store, bool (*is_up)(void))
 {
-    mb_server_ctx_t *c = malloc(sizeof(*c));
+    mb_server_ctx_t *c = calloc(1, sizeof(*c));
     if (c == NULL) {
         ESP_LOGE(TAG, "[%s] out of memory", name);
-        return;
+        return NULL;
     }
     c->name = name;
     c->ops = ops;
     c->port = port;
+    c->store = store;
     c->is_up = is_up;
 
     if (xTaskCreate(mb_server_task, name, 4096, c, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "[%s] xTaskCreate failed", name);
         free(c);
+        return NULL;
     }
+    return c;
+}
+
+bool mb_server_stop(mb_server_t *server, uint32_t timeout_ms)
+{
+    if (server == NULL) {
+        return true;
+    }
+
+    server->stop = true;
+
+    /* Poll rather than block on a semaphore: the task can be anywhere from an
+     * accept timeout to a partially-read ADU, and the wait is bounded by the
+     * longest of those rather than by anything worth signalling. */
+    for (uint32_t waited = 0; waited < timeout_ms; waited += 20) {
+        if (server->finished) {
+            free(server);
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+
+    ESP_LOGE(TAG, "[%s] did not stop within %u ms; leaking the handle rather "
+             "than freeing it under a live task", server->name,
+             (unsigned)timeout_ms);
+    return false;
+}
+
+uint16_t mb_server_port(const mb_server_t *server)
+{
+    return (server != NULL) ? server->port : 0;
 }

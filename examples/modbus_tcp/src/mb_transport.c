@@ -87,7 +87,11 @@ int mb_transport_accept(const void *vops, int listen_fd, uint32_t timeout_ms)
         ESP_LOGE(TAG, "accept failed: errno %d", errno);
         return -1;
     }
-    ESP_LOGI(TAG, "master connected from %s", inet_ntoa(peer.sin_addr));
+    /* Debug rather than info: the web server borrows this transport, so every
+     * status poll would otherwise log "master connected" once a second and bury
+     * the Modbus sessions this line is actually about. mb_server logs the ones
+     * that matter, with the interface name attached. */
+    ESP_LOGD(TAG, "connection from %s", inet_ntoa(peer.sin_addr));
 
     /* 0 is the caller's "nobody yet" value, so an accepted fd must never be 0.
      * It cannot be: lwIP descriptors start at LWIP_SOCKET_OFFSET, and the TOE
@@ -123,6 +127,22 @@ int mb_transport_recv_exact(const void *vops, int fd, void *buf, size_t size,
         return -1;
     }
     return (int)size;
+}
+
+int mb_transport_recv_some(const void *vops, int fd, void *buf, size_t size,
+                           uint32_t timeout_ms)
+{
+    const net_sock_ops_t *ops = (const net_sock_ops_t *)vops;
+    set_timeout(ops, fd, timeout_ms);
+
+    int n = ops->recv(fd, buf, size, 0);
+    if (n > 0) {
+        return n;
+    }
+    if (n == 0) {
+        return -1;                      /* peer closed */
+    }
+    return (errno == EAGAIN || errno == EWOULDBLOCK) ? 0 : -1;
 }
 
 int mb_transport_send(const void *vops, int fd, const void *buf, size_t len)

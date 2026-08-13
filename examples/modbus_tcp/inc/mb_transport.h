@@ -61,6 +61,20 @@ int mb_transport_accept(const void *ops, int listen_fd, uint32_t timeout_ms);
 int mb_transport_recv_exact(const void *ops, int fd, void *buf, size_t size,
                             uint32_t timeout_ms);
 
+/*
+ * Read whatever has arrived, up to `size` bytes. Returns the count, 0 on
+ * timeout, or -1 if the peer closed or the socket failed.
+ *
+ * Modbus never needs this -- an ADU announces its own length, so recv_exact is
+ * the right shape there. HTTP does: a request ends at a blank line whose
+ * position is not known in advance, and asking for one byte at a time to find
+ * it costs a socket round trip per byte. On the WIZnet chip that is an SPI
+ * transaction each, and a ~40-byte request line measured about 40 ms that way
+ * against a few milliseconds read in bulk.
+ */
+int mb_transport_recv_some(const void *ops, int fd, void *buf, size_t size,
+                           uint32_t timeout_ms);
+
 /* Write all of `len`. Returns 0 on success, -1 on failure. */
 int mb_transport_send(const void *ops, int fd, const void *buf, size_t len);
 

@@ -91,12 +91,16 @@ def bits(pdu, count):
 
 
 print("--- reads (the startup pattern from mb_datastore_init)")
-check("0x03 holding[0:10]", regs(request(struct.pack("!BHH", 0x03, 0, 10))),
-      list(range(1000, 1010)))
+# Read where nothing is written below, so the probe can be run twice without a
+# reboot in between. Checking holding[0:10] would fail on the second run purely
+# because the first run left 0xBEEF in holding[5] -- a red result that says
+# nothing about the server.
+check("0x03 holding[30:40]", regs(request(struct.pack("!BHH", 0x03, 30, 10))),
+      list(range(1030, 1040)))
 check("0x04 input[0:8]", regs(request(struct.pack("!BHH", 0x04, 0, 8))),
       [i * i for i in range(8)])
-check("0x01 coils[0:16]", bits(request(struct.pack("!BHH", 0x01, 0, 16)), 16),
-      [1 if i % 2 == 0 else 0 for i in range(16)])
+check("0x01 coils[32:48]", bits(request(struct.pack("!BHH", 0x01, 32, 16)), 16),
+      [1 if (32 + i) % 2 == 0 else 0 for i in range(16)])
 check("0x02 discrete[0:16]", bits(request(struct.pack("!BHH", 0x02, 0, 16)), 16),
       [1 if i % 4 == 0 else 0 for i in range(16)])
 
