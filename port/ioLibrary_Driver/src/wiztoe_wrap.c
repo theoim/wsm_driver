@@ -101,6 +101,10 @@ ssize_t __wrap_lwip_send(int s, const void *data, size_t size, int flags)
 {
     (void)flags;
     int n = wiztoe_send(s - LWIP_SOCKET_OFFSET, data, size);
+    /* SO_SNDTIMEO expiring is congestion, not a dead socket -- the same
+     * distinction recv already makes. A caller that treats every negative
+     * return as fatal would close a connection that was merely slow. */
+    if (n == WIZTOE_ERR_TIMEOUT) { errno = EWOULDBLOCK; return -1; }
     if (n < 0) { errno = EIO; return -1; }
     errno = 0;
     return n;

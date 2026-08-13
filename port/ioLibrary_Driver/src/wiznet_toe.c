@@ -202,12 +202,74 @@ int wiztoe_connect(int fd, const uint8_t ip[4], uint16_t port)
     return (connect((uint8_t)fd, (uint8_t *)ip, port) == SOCK_OK) ? 0 : -1;
 }
 
+/*
+ * Wait until the chip's transmit buffer has room for `len`, the same way
+ * wiztoe_recv waits for data: check, yield, count against the socket's timeout.
+ *
+ * This exists because ioLibrary's send() does the waiting itself, in a bare
+ * `while (1)` that re-reads Sn_TX_FSR and Sn_SR over SPI with no yield and no
+ * timeout (socket.c). While the buffer stays full that loop owns the core.
+ * Unplugging the cable mid-transfer is enough to reach it: the chip does not
+ * learn the link is gone straight away, so the socket stays ESTABLISHED, no ACK
+ * ever arrives, and the buffer never drains. Measured on a W5500 streaming
+ * video -- the task watchdog fired six times, five seconds apart, and the loop
+ * only broke twenty-seven seconds in when the chip's own TCP retransmission
+ * timeout finally moved the socket out of ESTABLISHED.
+ *
+ * Doing the wait here instead means the idle task keeps running, SO_SNDTIMEO
+ * means something, and ioLibrary's loop is entered only once there is already
+ * room -- so it exits on its first pass.
+ *
+ * Returns 0 when there is room, WIZTOE_ERR_TIMEOUT if SO_SNDTIMEO expired, or
+ * -1 if the socket went away while waiting.
+ */
+static int toe_wait_for_tx_room(int fd, uint16_t len)
+{
+    uint32_t waited = 0;
+
+    for (;;)
+    {
+        uint8_t sr = getSn_SR((uint8_t)fd);
+        if (sr != SOCK_ESTABLISHED && sr != SOCK_CLOSE_WAIT)
+            return -1;
+
+        /* The chip gave up retransmitting. Nothing more will drain, and
+         * ioLibrary would return an error a moment later anyway -- but only
+         * after another pass through its own loop. */
+        if (getSn_IR((uint8_t)fd) & Sn_IR_TIMEOUT)
+            return -1;
+
+        if (getSn_TX_FSR((uint8_t)fd) >= len)
+            return 0;
+
+        if (g_toe[fd].snd_timeout_ms && ++waited >= g_toe[fd].snd_timeout_ms)
+            return WIZTOE_ERR_TIMEOUT;
+
+        /* Yield even with no SO_SNDTIMEO set. Without a timeout this can still
+         * wait a long time -- until the chip's TCP timeout, as above -- but it
+         * waits without starving anything, which is the difference between a
+         * slow send and a watchdog reset. */
+        toe_yield_1ms();
+    }
+}
+
 int wiztoe_send(int fd, const void *buf, size_t len)
 {
     if (!toe_fd_valid(fd) || g_toe[fd].is_udp)
         return -1;
     if (len > 0xFFFF)
         len = 0xFFFF;
+
+    /* ioLibrary caps the length to the socket's transmit buffer and then waits
+     * for that much room. Cap it here so the wait below asks for the same
+     * amount rather than one ioLibrary will never be able to satisfy. */
+    uint16_t max = getSn_TxMAX((uint8_t)fd);
+    if (len > max)
+        len = max;
+
+    int rc = toe_wait_for_tx_room(fd, (uint16_t)len);
+    if (rc != 0)
+        return rc;                             /* -1 or WIZTOE_ERR_TIMEOUT */
 
     int32_t n = send((uint8_t)fd, (uint8_t *)buf, (uint16_t)len);
     return (n < 0) ? -1 : (int)n;
