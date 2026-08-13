@@ -103,9 +103,21 @@ static const char *TAG = "cam_server";
  * and a frame time when streaming. The wall-clock interval is therefore loose
  * on purpose: what matters is that a wedged listener is eventually rebuilt, not
  * that it happens on a schedule.
+ *
+ * Only on the TOE. LwIP's listener is never consumed by a connection and never
+ * enters this state, so recycling there would be a socket rebuild that buys
+ * nothing -- and a listener closed for a moment is a listener that can miss a
+ * connection arriving in it.
  */
-#define RECYCLE_AFTER       200
+#if defined(WSM_DRIVER_SOCKET_WRAP) && WSM_DRIVER_SOCKET_WRAP
+#define RECYCLE_AFTER       200   /* passes; see above */
+#else
+#define RECYCLE_AFTER 0   /* never: LwIP listeners do not wedge */
+#endif
 #define REQUEST_TIMEOUT_MS  2000
+
+/* Whole-request ceiling, not per read. See serve_request(). */
+#define REQUEST_DEADLINE_MS 5000
 #define REQUEST_BUF_SIZE    512
 
 #define STREAM_BOUNDARY     "wsmframe"
@@ -167,7 +179,8 @@ static int send_simple(const void *ops, int fd, const char *status,
  * control and a poll return the same shape and the UI never has to guess what
  * changed.
  */
-static int send_status(const cam_server_ctx_t *c, int fd, cam_stats_t *st)
+static int send_status_with(const cam_server_ctx_t *c, int fd,
+                            cam_stats_t *st, const char *status)
 {
     char body[900];
     int n = snprintf(body, sizeof(body),
@@ -194,8 +207,13 @@ static int send_status(const cam_server_ctx_t *c, int fd, cam_stats_t *st)
     if (n < 0 || (size_t)n >= sizeof(body)) {
         return -1;
     }
-    return send_simple(c->ops, fd, "200 OK", "application/json", body,
+    return send_simple(c->ops, fd, status, "application/json", body,
                        (size_t)n);
+}
+
+static int send_status(const cam_server_ctx_t *c, int fd, cam_stats_t *st)
+{
+    return send_status_with(c, fd, st, "200 OK");
 }
 
 /*
@@ -326,19 +344,30 @@ static int route(const cam_server_ctx_t *c, int fd, const http_request_t *req,
     if (strncmp(req->path, "/api/", 5) == 0) {
         const char *api = req->path + 5;
 
+        /*
+         * Refused settings are reported, not swallowed.
+         *
+         * Every control here can be turned down by the sensor -- a frame size
+         * it cannot allocate for, an XCLK it will not lock to -- and answering
+         * 200 with the current state either way tells the page the change went
+         * through. It then shows the old value with no explanation, which reads
+         * as the UI being broken rather than the request being refused.
+         */
+        bool refused = false;
+
         if (strcmp(api, "start") == 0) {
             st->streaming = true;
         } else if (strcmp(api, "stop") == 0) {
             st->streaming = false;
         } else if (strcmp(api, "reset") == 0) {
-            cam_reset();
+            refused = (cam_reset() != 0);
         } else if (strcmp(api, "res") == 0) {
             char value[16];
-            if (http_query_str(req->query, "v", value, sizeof(value)) == 0) {
+            if (http_query_str(req->query, "v", value, sizeof(value)) != 0) {
+                refused = true;
+            } else {
                 int res = cam_res_from_name(value);
-                if (res >= 0) {
-                    cam_set_resolution((cam_res_t)res);
-                }
+                refused = (res < 0) || (cam_set_resolution((cam_res_t)res) != 0);
             }
         } else if (strcmp(api, "controls") == 0) {
             send_controls(c, fd);
@@ -352,14 +381,22 @@ static int route(const cam_server_ctx_t *c, int fd, const http_request_t *req,
             int quality = http_query_int(req->query, "quality",
                                          cam_get_quality());
             int xclk = http_query_int(req->query, "xclk", cam_get_xclk_mhz());
-            cam_set_quality(quality);
-            cam_set_xclk_mhz(xclk);
+
+            /* Every requested change is attempted even if an earlier one
+             * failed: they are independent, and stopping at the first refusal
+             * would leave the rest of a slider panel silently unapplied. */
+            if (quality != cam_get_quality() && cam_set_quality(quality) != 0) {
+                refused = true;
+            }
+            if (xclk != cam_get_xclk_mhz() && cam_set_xclk_mhz(xclk) != 0) {
+                refused = true;
+            }
 
             for (int i = 0; i < cam_ctrl_count(); i++) {
                 const cam_ctrl_t *ctrl = cam_ctrl_at(i);
                 int value = http_query_int(req->query, ctrl->name, INT_MIN);
-                if (value != INT_MIN) {
-                    cam_ctrl_set(ctrl->name, value);
+                if (value != INT_MIN && cam_ctrl_set(ctrl->name, value) != 0) {
+                    refused = true;
                 }
             }
         } else if (strcmp(api, "status") != 0) {
@@ -368,7 +405,13 @@ static int route(const cam_server_ctx_t *c, int fd, const http_request_t *req,
             return -1;
         }
 
-        send_status(c, fd, st);
+        if (refused) {
+            ESP_LOGW(TAG, "[%s] /api/%s: the sensor refused a setting",
+                     c->name, api);
+        }
+        /* The body is the status document either way, so the page's single
+         * render path still works; the status code carries the outcome. */
+        send_status_with(c, fd, st, refused ? "409 Conflict" : "200 OK");
         return -1;
     }
 
@@ -381,12 +424,50 @@ static int serve_request(const cam_server_ctx_t *c, slot_t *slot,
                          cam_stats_t *st)
 {
     char buf[REQUEST_BUF_SIZE];
-    int n = http_recv(c->ops, slot->fd, buf, sizeof(buf) - 1,
-                      REQUEST_TIMEOUT_MS);
-    if (n <= 0) {
-        return -1;
+    size_t got = 0;
+
+    /*
+     * Read until the request line is complete, not once.
+     *
+     * A single recv() returns whatever one TCP segment carried, and there is no
+     * rule that a browser's request line arrives in one. Parsing the first
+     * fragment gives a truncated path -- "/api/stat" routes to the 404 -- and
+     * the failure is intermittent, which is the worst kind: it depends on how
+     * the request happened to be split on the way over.
+     *
+     * The absolute deadline matters as much as the loop. A per-read timeout
+     * alone bounds nothing, because a client dribbling one byte inside it keeps
+     * resetting the clock, and with three listeners one such client is a
+     * noticeable share of the server.
+     */
+    int64_t deadline = esp_timer_get_time() +
+                       (int64_t)REQUEST_DEADLINE_MS * 1000;
+
+    for (;;) {
+        if (esp_timer_get_time() > deadline) {
+            send_simple(c->ops, slot->fd, "408 Request Timeout", "text/plain",
+                        "took too long\n", 14);
+            return -1;
+        }
+
+        int n = http_recv(c->ops, slot->fd, buf + got, sizeof(buf) - got - 1,
+                          REQUEST_TIMEOUT_MS);
+        if (n < 0) {
+            return -1;
+        }
+        if (n > 0) {
+            got += (size_t)n;
+            buf[got] = '\0';
+            if (strstr(buf, "\r\n") != NULL) {
+                break;                  /* the request line is all we parse */
+            }
+        }
+        if (got + 2 >= sizeof(buf)) {
+            send_simple(c->ops, slot->fd, "431 Request Header Fields Too Large",
+                        "text/plain", "request too large\n", 18);
+            return -1;
+        }
     }
-    buf[n] = '\0';
 
     /* Only the request line matters here; the headers that follow are read off
      * the socket with it and discarded. A request larger than the buffer is a
@@ -486,7 +567,20 @@ static void cam_server_task(void *arg)
 
         /* ---- take new connections ---- */
         for (int i = 0; i < listeners; i++) {
-            if (listen_fds[i] < 0 || listener_in_use(slots, listen_fds[i])) {
+            if (listen_fds[i] < 0) {
+                /* Lost earlier and worth another try: running out of hardware
+                 * sockets is usually momentary -- another connection closing
+                 * frees one -- so a listener that could not be rebuilt then
+                 * should not be written off for the life of the task. */
+                int again[1];
+                if (http_listen_pool(c->ops, c->port, 1, again) == 1) {
+                    listen_fds[i] = again[0];
+                    ESP_LOGI(TAG, "[%s] listener %d is back", c->name, i);
+                } else {
+                    continue;
+                }
+            }
+            if (listener_in_use(slots, listen_fds[i])) {
                 continue;
             }
             slot_t *slot = free_slot(slots);
@@ -503,7 +597,7 @@ static void cam_server_task(void *arg)
                 /* An idle listener and one stuck in CLOSE_WAIT look identical
                  * from here; rebuilding costs a socket open and is the only
                  * escape from the second. */
-                if (++idle_passes[i] >= RECYCLE_AFTER) {
+                if (RECYCLE_AFTER > 0 && ++idle_passes[i] >= RECYCLE_AFTER) {
                     idle_passes[i] = 0;
                     http_close(c->ops, listen_fds[i]);
                     int again[1];

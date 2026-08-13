@@ -94,7 +94,11 @@ static const char *TAG = "web";
  * the way it treats SOCK_CLOSED. Until then, every TOE server that faces a
  * browser needs something like this.
  */
-#define RECYCLE_AFTER       100     /* x 20 ms = 2 s of nothing arriving */
+#if defined(WSM_DRIVER_SOCKET_WRAP) && WSM_DRIVER_SOCKET_WRAP
+#define RECYCLE_AFTER       100   /* x 20 ms = 2 s of nothing arriving */
+#else
+#define RECYCLE_AFTER 0   /* never: LwIP listeners do not wedge */
+#endif
 #define REQUEST_BUF_SIZE    1024
 #define JSON_BUF_SIZE       3072
 #define STORE_TIMEOUT_MS    500
@@ -582,7 +586,7 @@ static void web_server_task(void *arg)
                  * listener stuck in CLOSE_WAIT, and from here the two look
                  * identical. Rebuilding after a while costs nothing in the
                  * first case and is the only escape from the second. */
-                if (++idle_passes[i] >= RECYCLE_AFTER) {
+                if (RECYCLE_AFTER > 0 && ++idle_passes[i] >= RECYCLE_AFTER) {
                     idle_passes[i] = 0;
                     mb_transport_close(c->ops, listeners[i]);
                     listeners[i] = mb_transport_listen(c->ops, c->port);

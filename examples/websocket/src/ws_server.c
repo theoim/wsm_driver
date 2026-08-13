@@ -50,8 +50,17 @@ static const char *TAG = "ws_server";
  *
  * The real fix belongs in wiztoe_accept(), which should treat SOCK_CLOSE_WAIT
  * the way it treats SOCK_CLOSED.
+ *
+ * Only on the TOE. LwIP's listener is never consumed by a connection and never
+ * enters this state, so recycling there would be a socket rebuild that buys
+ * nothing -- and a listener closed for a moment is a listener that can miss a
+ * connection arriving in it.
  */
-#define RECYCLE_AFTER      10      /* x 200 ms = 2 s of silence */
+#if defined(WSM_DRIVER_SOCKET_WRAP) && WSM_DRIVER_SOCKET_WRAP
+#define RECYCLE_AFTER      10   /* x 200 ms = 2 s of silence */
+#else
+#define RECYCLE_AFTER 0   /* never: LwIP listeners do not wedge */
+#endif
 
 typedef struct {
     const char *name;
@@ -168,7 +177,7 @@ static void ws_server_task(void *arg)
             /* An idle server and a listener stuck in CLOSE_WAIT look identical
              * from here, so rebuild after a while: free in the first case, and
              * the only way out of the second. */
-            if (++idle_passes >= RECYCLE_AFTER) {
+            if (RECYCLE_AFTER > 0 && ++idle_passes >= RECYCLE_AFTER) {
                 idle_passes = 0;
                 ws_transport_close(c->ops, listen_fd);
                 listen_fd = ws_transport_listen(c->ops, c->port);

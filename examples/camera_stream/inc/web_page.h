@@ -293,7 +293,21 @@ static const char HTTP_INDEX_PAGE[] =
 "  requestAnimationFrame(tick);\n"
 "}\n"
 "requestAnimationFrame(tick);\n"
-"function call(p){return fetch(p).then(function(r){return r.json()}).then(render)}\n"
+/* 409 means the sensor turned a setting down. The body is still the status
+   document, so render it either way -- the panel then snaps back to what the
+   hardware actually has, which is the honest answer -- but say so, because a
+   slider quietly returning to its old position reads as a broken page. */
+"function call(p){\n"
+"  return fetch(p).then(function(r){\n"
+"    var refused=(r.status===409);\n"
+"    return r.json().then(function(s){\n"
+"      render(s);\n"
+"      if(refused){$('s-hint').innerHTML='The sensor <b>refused</b> that '\n"
+"        +'setting; showing what it actually has.'}\n"
+"      return s;\n"
+"    });\n"
+"  });\n"
+"}\n"
 "function render(s){\n"
 "  $('s-state').textContent=s.streaming?'STREAMING':'STOPPED';\n"
 "  $('s-res').textContent=s.res;\n"

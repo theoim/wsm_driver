@@ -52,7 +52,11 @@ static const char *TAG = "mb_server";
  * retry timer -- kept it there. Rebuilding an idle listener costs a socket open
  * and a listen.
  */
-#define RECYCLE_AFTER       10      /* x 200 ms = 2 s of nothing arriving */
+#if defined(WSM_DRIVER_SOCKET_WRAP) && WSM_DRIVER_SOCKET_WRAP
+#define RECYCLE_AFTER       10   /* x 200 ms = 2 s of nothing arriving */
+#else
+#define RECYCLE_AFTER 0   /* never: LwIP listeners do not wedge */
+#endif
 
 struct mb_server {
     const char  *name;
@@ -191,7 +195,7 @@ static void mb_server_task(void *arg)
              * CLOSE_WAIT look identical from here, so rebuild after a while.
              * Free when it is the first, and the only way out when it is the
              * second. */
-            if (++idle_passes >= RECYCLE_AFTER) {
+            if (RECYCLE_AFTER > 0 && ++idle_passes >= RECYCLE_AFTER) {
                 idle_passes = 0;
                 mb_transport_close(c->ops, listen_fd);
                 listen_fd = mb_transport_listen(c->ops, c->port);

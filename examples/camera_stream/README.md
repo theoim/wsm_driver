@@ -36,9 +36,22 @@ idf.py set-target esp32s3
 idf.py menuconfig
 ```
 
-Select **Component config**, then **WIZnet WSM Driver**, then choose the **Board**. The chip and its pins both follow from that. For wiring no listed board covers, choose **Custom**: that is the one setting where the pin fields become editable.
+Select **Component config**, then **WIZnet WSM Driver**, then choose the **Board**. The chip and its pins both follow from that.
 
-**W5500 wiring (standard SPI)**
+**On a XIAO, choose Custom.** The board list covers the WIZnet dev-kits, and the XIAO is not one of them — its SPI is on the castellated pads, not the dev-kit's GPIOs, so no listed board describes it. Custom is the one setting where the pin fields become editable, and the pins below are what this example was verified on:
+
+| W5500 | XIAO pad | GPIO |
+|-------|----------|------|
+| MOSI  | D10 | 9  |
+| MISO  | D5  | 6  |
+| SCLK  | D9  | 8  |
+| CS    | D8  | 7  |
+| RESET | D6  | 43 |
+| INT   | D7  | 44 |
+
+> RESET and INT land on GPIO43/44, which are the ESP32-S3's UART0 console pins. This example's `sdkconfig.defaults` already moves the console to the USB Serial/JTAG controller for that reason — the XIAO's USB is native, so the log keeps working and both pins come free. Leave the console on UART0 and the reset line will fight it.
+
+For reference, the **ESP32-W5500 Dev-kit** wiring the board list already knows — pick the board and the pins follow, with nothing to type:
 
 | W5500 | ESP32-S3 Pin |
 |-------|--------------|
@@ -49,7 +62,7 @@ Select **Component config**, then **WIZnet WSM Driver**, then choose the **Board
 | RESET | 9  |
 | INT   | 14 |
 
-> The XIAO's SPI pads are GPIO7/8/9 with RSTn and INTn commonly on GPIO43/44, which are the ESP32-S3's UART0 console pins. This example's `sdkconfig.defaults` already moves the console to the USB Serial/JTAG controller for that reason — the XIAO's USB is native, so the log keeps working and both pins come free.
+Nothing here is committed: `sdkconfig` is generated and ignored, so the pins you enter stay on your machine. That is deliberate — a pin map checked in would be wrong for every board except the one it came from.
 
 ### What this example needs that the others do not
 

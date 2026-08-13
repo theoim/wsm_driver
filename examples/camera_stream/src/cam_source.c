@@ -30,7 +30,9 @@ static camera_fb_t      *s_fb;
  * the sensor. */
 static void apply_all_controls(sensor_t *s);
 
-static cam_res_t s_res     = CAM_RES_VGA;
+/* Plain int rather than cam_res_t so reinit_with_rollback can take its
+ * address; an enum's underlying type is not guaranteed to be int. */
+static int       s_res     = CAM_RES_VGA;
 static int       s_quality = 12;
 static int       s_xclk    = 20;
 
@@ -165,23 +167,47 @@ static int with_lock(int (*fn)(void))
     return rc;
 }
 
+/*
+ * Change a setting that needs the driver rebuilt, and put the camera back if it
+ * does not come up.
+ *
+ * Restoring the variable is not enough on its own. build_config() reads these
+ * globals, so a failed re-init leaves the driver deinitialised while s_res says
+ * something perfectly reasonable -- the state is consistent and the camera is
+ * dead. The rollback has to run the init again with the old value, and if that
+ * fails too there is nothing left to try: say so rather than return a code that
+ * suggests the previous setting is still working.
+ */
+static int reinit_with_rollback(int *setting, int wanted, const char *what)
+{
+    int previous = *setting;
+    if (wanted == previous) {
+        return 0;
+    }
+    *setting = wanted;
+
+    if (with_lock(reinit_locked) == 0) {
+        ESP_LOGI(TAG, "%s -> %d", what, wanted);
+        return 0;
+    }
+
+    *setting = previous;
+    if (with_lock(reinit_locked) == 0) {
+        ESP_LOGW(TAG, "%s %d refused; back on %d", what, wanted, previous);
+    } else {
+        ESP_LOGE(TAG, "%s %d refused and %d would not come back either -- "
+                 "the sensor is down until /api/reset or a reboot",
+                 what, wanted, previous);
+    }
+    return -1;
+}
+
 int cam_set_resolution(cam_res_t res)
 {
     if (res < 0 || res >= CAM_RES_COUNT) {
         return -1;
     }
-    if (res == s_res) {
-        return 0;
-    }
-    cam_res_t previous = s_res;
-    s_res = res;
-
-    if (with_lock(reinit_locked) < 0) {
-        s_res = previous;
-        return -1;
-    }
-    ESP_LOGI(TAG, "resolution -> %s", kRes[s_res].name);
-    return 0;
+    return reinit_with_rollback(&s_res, (int)res, "resolution");
 }
 
 int cam_set_quality(int quality)
@@ -189,9 +215,11 @@ int cam_set_quality(int quality)
     if (quality < 0 || quality > 63) {
         return -1;
     }
-    s_quality = quality;
 
-    /* Quality is the one control the sensor takes live, with no re-init. */
+    /* Quality is the one control the sensor takes live, with no re-init -- and
+     * the stored value follows the sensor rather than leading it, so a setter
+     * that refuses does not leave the page reporting a quality the hardware
+     * never accepted. */
     if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(3000)) != pdTRUE) {
         return -1;
     }
@@ -199,8 +227,13 @@ int cam_set_quality(int quality)
     int rc = (s != NULL) ? s->set_quality(s, quality) : -1;
     xSemaphoreGive(s_lock);
 
+    if (rc != 0) {
+        ESP_LOGW(TAG, "sensor refused quality %d", quality);
+        return -1;
+    }
+    s_quality = quality;
     ESP_LOGI(TAG, "quality -> %d", quality);
-    return rc;
+    return 0;
 }
 
 int cam_set_xclk_mhz(int mhz)
@@ -210,18 +243,7 @@ int cam_set_xclk_mhz(int mhz)
     if (mhz < 10 || mhz > 24) {
         return -1;
     }
-    if (mhz == s_xclk) {
-        return 0;
-    }
-    int previous = s_xclk;
-    s_xclk = mhz;
-
-    if (with_lock(reinit_locked) < 0) {
-        s_xclk = previous;
-        return -1;
-    }
-    ESP_LOGI(TAG, "xclk -> %d MHz", mhz);
-    return 0;
+    return reinit_with_rollback(&s_xclk, mhz, "xclk");
 }
 
 int cam_reset(void)
@@ -378,7 +400,7 @@ static void apply_all_controls(sensor_t *s)
     }
 }
 
-cam_res_t cam_get_resolution(void) { return s_res; }
+cam_res_t cam_get_resolution(void) { return (cam_res_t)s_res; }
 int       cam_get_quality(void)    { return s_quality; }
 int       cam_get_xclk_mhz(void)   { return s_xclk; }
 
