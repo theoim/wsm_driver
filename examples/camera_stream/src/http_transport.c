@@ -113,6 +113,16 @@ int http_recv(const void *vops, int fd, void *buf, size_t size,
     return (errno == EAGAIN || errno == EWOULDBLOCK) ? 0 : -1;
 }
 
+int http_set_send_timeout(const void *vops, int fd, uint32_t timeout_ms)
+{
+    const net_sock_ops_t *ops = (const net_sock_ops_t *)vops;
+    struct timeval tv = {
+        .tv_sec  = timeout_ms / 1000,
+        .tv_usec = (timeout_ms % 1000) * 1000,
+    };
+    return ops->setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+}
+
 int http_send(const void *vops, int fd, const void *buf, size_t len)
 {
     const net_sock_ops_t *ops = (const net_sock_ops_t *)vops;

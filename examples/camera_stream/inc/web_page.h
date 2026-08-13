@@ -138,7 +138,10 @@ static const char HTTP_INDEX_PAGE[] =
 "<body>\n"
 "<header>\n"
 "  <div class='mark'>WIZnet</div>\n"
-"  <div class='sub'>OV3660 &middot; Ethernet Video Streaming</div>\n"
+/* The address the page was fetched from, shown because the whole point of
+   serving this on both interfaces is putting two tabs side by side -- and a
+   screenshot of two identical headers is a screenshot of nothing. */
+"  <div class='sub'>OV3660 &middot; <span id='addr'></span></div>\n"
 "  <div class='stackbox'>\n"
 "    <div class='what' id='what'>&nbsp;</div>\n"
 "    <div class='tag' id='stack'>&nbsp;</div>\n"
@@ -224,9 +227,10 @@ static const char HTTP_INDEX_PAGE[] =
 "<footer>Served from the device</footer>\n"
 "<script>\n"
 "var $=function(id){return document.getElementById(id)};\n"
+"$('addr').textContent=location.host;\n"
 "var css=getComputedStyle(document.documentElement);\n"
 "var C=function(n){return css.getPropertyValue(n).trim()};\n"
-"var last={};\n"
+"var last={},stalled=0;\n"
 "var MAXP=60;\n"
 "function mkChart(id,rgb,fixed,div){\n"
 "  var c={cv:$(id),rgb:rgb,fixed:fixed,div:div,hist:[],shown:0,target:0};\n"
@@ -313,7 +317,8 @@ static const char HTTP_INDEX_PAGE[] =
 "  $('s-res').textContent=s.res;\n"
 "  $('s-frames').textContent=s.frames;\n"
 "  $('s-drop').textContent=s.dropped;\n"
-"  $('dot').className='dot'+(s.streaming?' live':'');\n"
+/* The dot is set further down, once the frame counter has been compared --
+ * "streaming" alone does not mean frames are arriving. */
 "  $('start').disabled=s.streaming;\n"
 "  $('stop').disabled=!s.streaming;\n"
 "  if($('res').value!==s.res){$('res').value=s.res}\n"
@@ -348,6 +353,24 @@ static const char HTTP_INDEX_PAGE[] =
 "    $('xclk').value=s.xclk;$('v-xclk').textContent=s.xclk;\n"
 "  }\n"
 "  if(s.ctrl){renderCtrls(s.ctrl)}\n"
+/* ---- Reconnect a stream that died under us ----
+   `streaming` is what the user asked for, not what the connection is doing, so
+   it stays true when the link drops -- correctly. But a multipart response that
+   breaks is not retried by the browser, and this page only ever set img.src on
+   START or a settings change. Pull the Ethernet cable and the view stays frozen
+   even after the cable goes back in, until someone presses STOP and START.
+
+   The device already reports the answer: if it says it is streaming and its
+   frame counter has not moved for a few seconds, nothing is arriving. Ask for
+   the stream again. While the cable is still out this fails quietly and retries;
+   when it returns, the view comes back on its own. */
+"  if(s.streaming&&last.frames!==undefined){\n"
+"    if(s.frames===last.frames){stalled++}else{stalled=0}\n"
+"    if(stalled>=3){stalled=0;restartStream()}\n"
+"  }else{stalled=0}\n"
+/* The dot follows the frames, not the flag: "STREAMING" with nothing arriving
+   is the state this whole block exists because of. */
+"  $('dot').className='dot'+((s.streaming&&stalled===0)?' live':'');\n"
 "  last=s;\n"
 "}\n"
 

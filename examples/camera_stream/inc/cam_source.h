@@ -69,8 +69,16 @@ int cam_source_init(void);
  * the caller should count a drop rather than tear the connection down: a
  * dropped frame is recoverable and a closed stream is not.
  *
- * The buffer belongs to the driver until cam_frame_release(). Both interfaces
- * take turns through one mutex, so hold it only for as long as the send takes.
+ * The buffer belongs to the driver until cam_frame_release(), so it cannot be
+ * given back before the send finishes -- the buffer being sent is the driver's.
+ * That makes the hold time the other interface's stall time: both servers wait
+ * on this one mutex for their next frame, so a write that blocks here blocks
+ * both streams, not one.
+ *
+ * Which is why the stream sockets set a send timeout (http_set_send_timeout).
+ * Without one, a pulled cable holds the sensor for as long as the chip keeps
+ * retransmitting -- about ten seconds -- and the other interface shows nothing
+ * for all of it. That is not a hypothetical; it is what the first version did.
  */
 const uint8_t *cam_frame_get(size_t *len, uint32_t *capture_ms);
 void cam_frame_release(void);

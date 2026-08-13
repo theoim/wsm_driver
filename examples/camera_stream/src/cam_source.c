@@ -187,8 +187,7 @@ static int reinit_with_rollback(int *setting, int wanted, const char *what)
     *setting = wanted;
 
     if (with_lock(reinit_locked) == 0) {
-        ESP_LOGI(TAG, "%s -> %d", what, wanted);
-        return 0;
+        return 0;                       /* the caller names what changed */
     }
 
     *setting = previous;
@@ -207,7 +206,11 @@ int cam_set_resolution(cam_res_t res)
     if (res < 0 || res >= CAM_RES_COUNT) {
         return -1;
     }
-    return reinit_with_rollback(&s_res, (int)res, "resolution");
+    if (reinit_with_rollback(&s_res, (int)res, "resolution") != 0) {
+        return -1;
+    }
+    ESP_LOGI(TAG, "resolution -> %s", kRes[s_res].name);
+    return 0;
 }
 
 int cam_set_quality(int quality)
@@ -243,7 +246,11 @@ int cam_set_xclk_mhz(int mhz)
     if (mhz < 10 || mhz > 24) {
         return -1;
     }
-    return reinit_with_rollback(&s_xclk, mhz, "xclk");
+    if (reinit_with_rollback(&s_xclk, mhz, "xclk") != 0) {
+        return -1;
+    }
+    ESP_LOGI(TAG, "xclk -> %d MHz", mhz);
+    return 0;
 }
 
 int cam_reset(void)

@@ -118,6 +118,17 @@ static const char *TAG = "cam_server";
 
 /* Whole-request ceiling, not per read. See serve_request(). */
 #define REQUEST_DEADLINE_MS 5000
+
+/*
+ * How long one frame's write may block before the stream gives up.
+ *
+ * Sized against the camera mutex rather than against the network: the sending
+ * task holds the sensor for the whole write, so this is also the longest the
+ * OTHER interface can be left without a frame. Two seconds is long enough that
+ * ordinary congestion does not end a stream, and short enough that a pulled
+ * cable does not blank the other view.
+ */
+#define STREAM_SEND_TIMEOUT_MS  2000
 #define REQUEST_BUF_SIZE    512
 
 #define STREAM_BOUNDARY     "wsmframe"
@@ -333,6 +344,10 @@ static int route(const cam_server_ctx_t *c, int fd, const http_request_t *req,
                         "not streaming\n", 14);
             return -1;
         }
+        /* Before the first frame, not after: the timeout has to be in place
+         * for the write that might block. */
+        http_set_send_timeout(c->ops, fd, STREAM_SEND_TIMEOUT_MS);
+
         if (stream_begin(c->ops, fd) < 0) {
             return -1;
         }

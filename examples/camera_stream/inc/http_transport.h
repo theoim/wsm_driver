@@ -70,6 +70,21 @@ int http_accept(const void *ops, int listen_fd, uint32_t timeout_ms);
 int http_recv(const void *ops, int fd, void *buf, size_t size,
               uint32_t timeout_ms);
 
+/*
+ * Bound how long a write may block.
+ *
+ * Worth setting on a stream, because of what the camera mutex costs. A frame is
+ * borrowed from the sensor and held for the whole send -- the buffer being sent
+ * IS the driver's, so it cannot be given back early -- and the other interface's
+ * server is waiting on that same mutex for its own next frame. An unbounded
+ * write therefore does not stall one stream, it stalls both.
+ *
+ * The default is no timeout, which on the TOE means waiting until the chip's
+ * own TCP retransmission gives up: about ten seconds with the cable out, and
+ * ten seconds of the other interface showing nothing.
+ */
+int http_set_send_timeout(const void *ops, int fd, uint32_t timeout_ms);
+
 /* Write all of `len`. Returns 0 on success, -1 on failure. */
 int http_send(const void *ops, int fd, const void *buf, size_t len);
 
