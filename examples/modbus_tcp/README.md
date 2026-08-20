@@ -1,6 +1,6 @@
 # How to Test Modbus TCP Example
 
-> **Verified on a W5500.** Run on an XIAO ESP32-S3 + W5500, TOE backend, over Ethernet and over Wi-Fi. Every implemented function code and every exception path was exercised against the running device.
+> **Verified on the ESP32-SoM.** Run on the ESP32-SoM with both the W5500 and the W6300, TOE backend, over Ethernet and over Wi-Fi — including both interfaces serving at the same time. Every implemented function code and every exception path was exercised against the running device.
 
 A Modbus TCP server (slave). A master reads and writes the device's registers and coils over port 502, which is what a PLC, a SCADA package, or a `mbpoll` command line expects to find.
 

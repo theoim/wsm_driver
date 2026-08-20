@@ -1,6 +1,6 @@
 # How to Test WebSocket Example
 
-> **Verified on a W5500.** Run on an XIAO ESP32-S3 + W5500 over Ethernet, TOE backend. The Wi-Fi path builds but has not been exercised on hardware yet.
+> **Verified on the ESP32-SoM.** Run on the ESP32-SoM with both the W5500 and the W6300, TOE backend, over Ethernet and over Wi-Fi — including both interfaces serving at the same time.
 
 ## Step 1: Prepare software
 
