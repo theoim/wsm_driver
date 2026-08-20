@@ -69,10 +69,13 @@ static const wiz_NetInfo g_net_info = {
  */
 #if defined(WSM_DRIVER_SOCKET_WRAP) && WSM_DRIVER_SOCKET_WRAP
 #define ETH_LISTENERS   3
-#define ETH_STACK_NAME  "TOE"
+#define ETH_LINK_NAME   "TOE"
 #else
 #define ETH_LISTENERS   1
-#define ETH_STACK_NAME  "lwIP"
+/* Same wire either way, so the badge says ETHERNET rather than TOE: with the
+ * wrapper off this port is served by lwIP over the chip's MAC, which is the
+ * one arrangement where naming the link and naming the stack disagree. */
+#define ETH_LINK_NAME   "ETHERNET"
 #endif
 
 void app_main(void)
@@ -92,12 +95,12 @@ void app_main(void)
     }
 
     /* Start both servers as sibling tasks; each waits for its own link. Same
-     * call shape — only the label, stack name, vtable, port, listener count and
+     * call shape — only the label, link name, vtable, port, listener count and
      * readiness predicate differ. */
-    cam_server_start("eth", ETH_STACK_NAME, &net_eth_ops, CAM_PORT,
+    cam_server_start("eth", ETH_LINK_NAME, &net_eth_ops, CAM_PORT,
                      ETH_LISTENERS, wiznet_net_is_up);
     if (WIFI_CONFIGURED) {
-        cam_server_start("wifi", "lwIP", &net_wifi_ops, WIFI_CAM_PORT,
+        cam_server_start("wifi", "WI-FI", &net_wifi_ops, WIFI_CAM_PORT,
                          1, wifi_net_is_up);
     }
 }

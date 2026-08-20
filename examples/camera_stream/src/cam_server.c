@@ -164,7 +164,11 @@ typedef struct {
 
 typedef struct {
     const char *name;
-    const char *stack;
+    /* What the page prints on its badge: the link this server answers on, not
+     * the stack behind it. The stack cannot be derived from the link on the
+     * page's side -- Ethernet runs the TOE or lwIP depending on how the
+     * component was configured -- so the server, which knows, says which. */
+    const char *link;
     const void *ops;
     uint16_t    port;
     int         listeners;
@@ -197,13 +201,13 @@ static int send_status_with(const cam_server_ctx_t *c, int fd,
     int n = snprintf(body, sizeof(body),
         "{\"streaming\":%s,\"res\":\"%s\",\"frames\":%u,\"dropped\":%u,"
         "\"fps\":%.1f,\"kb\":%u,\"capture_ms\":%u,\"send_ms\":%u,"
-        "\"quality\":%d,\"xclk\":%d,\"stack\":\"%s\",\"ctrl\":{",
+        "\"quality\":%d,\"xclk\":%d,\"link\":\"%s\",\"ctrl\":{",
         st->streaming ? "true" : "false",
         cam_res_name(cam_get_resolution()),
         (unsigned)st->frames, (unsigned)st->dropped,
         st->fps, (unsigned)st->frame_kb,
         (unsigned)st->capture_ms, (unsigned)st->send_ms,
-        cam_get_quality(), cam_get_xclk_mhz(), c->stack);
+        cam_get_quality(), cam_get_xclk_mhz(), c->link);
 
     /* Current control values only -- the names, ranges and labels come from
      * /api/controls once at page load, because this document is fetched every
@@ -566,7 +570,7 @@ static void cam_server_task(void *arg)
     ESP_LOGI(TAG, "[%s] camera server on port %u, %d listener%s, "
              "%d connections (%s)",
              c->name, c->port, listeners, listeners == 1 ? "" : "s",
-             MAX_CONNS, c->stack);
+             MAX_CONNS, c->link);
 
     for (;;) {
         /* Decided once per pass rather than per listener, so every accept in
@@ -665,7 +669,7 @@ done:
     vTaskDelete(NULL);
 }
 
-void cam_server_start(const char *name, const char *stack_name, const void *ops,
+void cam_server_start(const char *name, const char *link_name, const void *ops,
                       uint16_t port, int listeners, bool (*is_up)(void))
 {
     cam_server_ctx_t *c = malloc(sizeof(*c));
@@ -674,7 +678,7 @@ void cam_server_start(const char *name, const char *stack_name, const void *ops,
         return;
     }
     c->name = name;
-    c->stack = stack_name;
+    c->link = link_name;
     c->ops = ops;
     c->port = port;
     c->listeners = listeners;

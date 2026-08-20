@@ -10,7 +10,7 @@
  * Adapted from the WIZnet ArduCAM MEGA streaming page, which was built to put
  * two boards side by side and compare their stacks. Here there is one board and
  * two interfaces, so the same comparison happens between two browser tabs: the
- * badge and the accent colour come from the "stack" field of /api/status, and
+ * badge and the accent colour come from the "link" field of /api/status, and
  * open http://<eth-ip> beside http://<wifi-ip>:81 to watch hardware TCP/IP and
  * software TCP/IP carry the same sensor at once.
  *
@@ -94,6 +94,11 @@ static const char HTTP_INDEX_PAGE[] =
 ".dot{display:inline-block;width:8px;height:8px;border-radius:50%;\n"
 "  margin-right:7px;background:var(--muted);vertical-align:middle}\n"
 ".dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok)}\n"
+/* Unreachable is not the same state as stopped, and the page used to draw them
+   identically -- see the offline() handler. Amber, and blinking, so a frozen
+   view reads as a dead link rather than as a live one that happens to be still. */
+".dot.gone{background:var(--warn);animation:blink 1s steps(2,end) infinite}\n"
+"@keyframes blink{50%{opacity:.15}}\n"
 "footer{text-align:center;color:var(--muted);font-size:12px;padding:8px 0 24px}\n"
 ".charts{display:grid;grid-template-columns:1fr 1fr;gap:24px}\n"
 "@media(max-width:900px){.charts{grid-template-columns:1fr}}\n"
@@ -230,7 +235,7 @@ static const char HTTP_INDEX_PAGE[] =
 "$('addr').textContent=location.host;\n"
 "var css=getComputedStyle(document.documentElement);\n"
 "var C=function(n){return css.getPropertyValue(n).trim()};\n"
-"var last={},stalled=0;\n"
+"var last={},stalled=0,misses=0,wasGone=false;\n"
 "var MAXP=60;\n"
 "function mkChart(id,rgb,fixed,div){\n"
 "  var c={cv:$(id),rgb:rgb,fixed:fixed,div:div,hist:[],shown:0,target:0};\n"
@@ -313,6 +318,12 @@ static const char HTTP_INDEX_PAGE[] =
 "  });\n"
 "}\n"
 "function render(s){\n"
+/* A poll getting through after the link was down is the earliest moment the
+   view can come back. Waiting for the stall counter to reach three works too,
+   but it spends three more seconds staring at a frozen frame for a link that is
+   already known to be up. */
+"  if(wasGone){wasGone=false;setTimeout(restartStream,300)}\n"
+"  misses=0;\n"
 "  $('s-state').textContent=s.streaming?'STREAMING':'STOPPED';\n"
 "  $('s-res').textContent=s.res;\n"
 "  $('s-frames').textContent=s.frames;\n"
@@ -338,15 +349,19 @@ static const char HTTP_INDEX_PAGE[] =
 "    $('s-bwmax').textContent=bmx.toFixed(1)+' Mbps';\n"
 "  }\n"
 "  $('s-hint').innerHTML=hint(s);\n"
-"  if(s.stack){\n"
-"    var toe=(s.stack==='TOE');\n"
-"    $('stack').textContent=toe?'TOE':'lwIP';\n"
+/* The badge names the link, not the stack: someone opening two windows knows
+   which cable they pulled, and "lwIP" asks them to know what lwIP is before the
+   page has told them. The line beside it still names the stack, so nothing is
+   lost -- WI-FI reads instantly and "Software TCP/IP on the MCU" explains it. */
+"  if(s.link){\n"
+"    var toe=(s.link==='TOE');\n"
+"    $('stack').textContent=s.link;\n"
 "    $('what').textContent=toe\n"
 "      ?'Hardwired TCP/IP - the WIZnet chip terminates TCP'\n"
 "      :'Software TCP/IP - lwIP terminates TCP on the MCU';\n"
 "    document.documentElement.style.setProperty('--stack',\n"
 "      toe?'#e01b24':'#1f2933');\n"
-"    document.title=s.stack+' camera';\n"
+"    document.title=s.link+' camera';\n"
 "  }\n"
 "  if(document.activeElement!==$('quality')&&document.activeElement!==$('xclk')){\n"
 "    $('quality').value=s.quality;$('v-quality').textContent=s.quality;\n"
@@ -372,6 +387,31 @@ static const char HTTP_INDEX_PAGE[] =
    is the state this whole block exists because of. */
 "  $('dot').className='dot'+((s.streaming&&stalled===0)?' live':'');\n"
 "  last=s;\n"
+"}\n"
+
+/* ---- The status poll itself failed ----
+   Everything above runs only when /api/status came back. Pull this interface's
+   cable and the request never completes, so render() does not run at all: the
+   stall counter never advances, the dot keeps whatever class it had, and the
+   numbers stay at their last good values. The page then shows a live-looking
+   view of an interface that is gone -- which is precisely the wrong answer, and
+   was the reason a "failover" screenshot showed both sides healthy.
+
+   So the failed poll is a state of its own. The device's own numbers are left
+   on screen deliberately -- they are the last thing that was true, and blanking
+   them would throw away the comparison the page exists to make -- but the state
+   line and the dot say the link is down.
+
+   Two consecutive misses rather than one, because a single dropped poll happens
+   on a busy link and a page that flickers "unreachable" every few minutes is
+   worse than one that is two seconds late. */
+"function offline(){\n"
+"  if(++misses<2){return}\n"
+"  stalled=0;wasGone=true;\n"
+"  $('s-state').textContent='UNREACHABLE';\n"
+"  $('dot').className='dot gone';\n"
+"  $('s-hint').innerHTML='No reply from <b>'+location.host+'</b>. '\n"
+"    +'Values below are the last ones it reported.';\n"
 "}\n"
 
 /* ---- Sensor controls, built from what the device reports ----
@@ -416,7 +456,7 @@ static const char HTTP_INDEX_PAGE[] =
 "  ctrlEls[c.name]={el:el,vl:vl,toggle:toggle};\n"
 "  return row;\n"
 "}\n"
-"function send(name,value){call('/api/cam?'+name+'='+value)}\n"
+"function send(name,value){call('/api/cam?'+name+'='+value).catch(offline)}\n"
 "function renderCtrls(values){\n"
 "  for(var k in values){\n"
 "    var e=ctrlEls[k];\n"
@@ -441,13 +481,18 @@ static const char HTTP_INDEX_PAGE[] =
 "}\n"
 "var seq=0;\n"
 "function restartStream(){$('view').src='/stream?'+(++seq)}\n"
+/* Every one of these ends in .catch(offline) for the same reason the poll does:
+   a control that cannot reach the device is itself evidence the link is down,
+   and an uncaught rejection here would leave the page looking healthy while the
+   button quietly did nothing. */
 "$('start').onclick=function(){call('/api/start').then(function(){\n"
-"  setTimeout(restartStream,150)})};\n"
-"$('stop').onclick=function(){call('/api/stop')};\n"
+"  setTimeout(restartStream,150)}).catch(offline)};\n"
+"$('stop').onclick=function(){call('/api/stop').catch(offline)};\n"
 "$('res').onchange=function(){\n"
 "  var v=this.value;\n"
 "  charts.forEach(function(c){c.hist=[];c.shown=0;c.target=0});\n"
 "  call('/api/res?v='+v).then(function(){setTimeout(restartStream,400)})\n"
+"    .catch(offline);\n"
 "};\n"
 "$('quality').oninput=function(){$('v-quality').textContent=this.value};\n"
 "$('xclk').oninput=function(){$('v-xclk').textContent=this.value};\n"
@@ -456,7 +501,7 @@ static const char HTTP_INDEX_PAGE[] =
 "  $('v-quality').textContent=q;$('v-xclk').textContent=x;\n"
 "  charts.forEach(function(c){c.hist=[];c.shown=0;c.target=0});\n"
 "  return call('/api/cam?quality='+q+'&xclk='+x)\n"
-"    .then(function(){setTimeout(restartStream,400)});\n"
+"    .then(function(){setTimeout(restartStream,400)}).catch(offline);\n"
 "}\n"
 "$('apply').onclick=function(){applyCam($('quality').value,$('xclk').value)};\n"
 "$('reset').onclick=function(){applyCam(12,20)};\n"
@@ -464,9 +509,10 @@ static const char HTTP_INDEX_PAGE[] =
 "  $('recover').textContent='...';\n"
 "  call('/api/reset').then(function(){\n"
 "    $('recover').textContent='Recover';setTimeout(restartStream,400)})\n"
+"    .catch(function(){$('recover').textContent='Recover';offline()});\n"
 "};\n"
-"setInterval(function(){call('/api/status').catch(function(){})},1000);\n"
-"call('/api/status').catch(function(){});\n"
+"setInterval(function(){call('/api/status').catch(offline)},1000);\n"
+"call('/api/status').catch(offline);\n"
 "</script>\n"
 "</body>\n"
 "</html>\n";
