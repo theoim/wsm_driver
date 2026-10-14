@@ -101,8 +101,11 @@ check("0x04 input[0:8]", regs(request(struct.pack("!BHH", 0x04, 0, 8))),
       [i * i for i in range(8)])
 check("0x01 coils[32:48]", bits(request(struct.pack("!BHH", 0x01, 32, 16)), 16),
       [1 if (32 + i) % 2 == 0 else 0 for i in range(16)])
-check("0x02 discrete[0:16]", bits(request(struct.pack("!BHH", 0x02, 0, 16)), 16),
-      [1 if i % 4 == 0 else 0 for i in range(16)])
+# discrete[0] is wired to a pin (see io_bind.c), so its value is whatever the
+# contact is doing rather than the startup pattern. Read a window past the
+# bound elements, the same reason the coil read above starts at 32.
+check("0x02 discrete[16:32]", bits(request(struct.pack("!BHH", 0x02, 16, 16)), 16),
+      [1 if (16 + i) % 4 == 0 else 0 for i in range(16)])
 
 print("\n--- writes, each read back")
 request(struct.pack("!BHH", 0x06, 5, 0xBEEF))

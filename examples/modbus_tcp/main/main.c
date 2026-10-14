@@ -48,6 +48,7 @@
 
 #include "app_config.h"
 #include "app_control.h"
+#include "io_bind.h"
 #include "mb_server.h"
 #include "mb_store.h"
 #include "net_config.h"
@@ -105,6 +106,15 @@ void app_main(void)
     if (store == NULL) {
         ESP_LOGE(TAG, "out of memory for the data model");
         return;
+    }
+
+    /* Bind two elements of that model to two pins, before anything can be
+     * written to it. mb_datastore_init() seeds coil[0] on as part of the demo
+     * pattern, and a coil wired to a relay is not a display value -- io_bind
+     * drives the pin inactive and clears the coil, in that order, so the board
+     * does not close a contact on the way out of reset. See io_bind.h. */
+    if (!io_bind_start(store)) {
+        ESP_LOGW(TAG, "I/O not bound; the server runs but drives nothing");
     }
 
     /* Ethernet (WIZnet chip) first: it initializes esp_netif + the default event

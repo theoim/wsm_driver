@@ -74,6 +74,22 @@ static const char *TAG = "web";
 #define LISTEN_RETRY_MS     1000
 
 /*
+ * Ceiling on that pause when the retry keeps failing, and the pause taken when
+ * no listener is left to poll.
+ *
+ * A listener that cannot be rebuilt is not a transient condition: on the TOE it
+ * means the hardware socket is wedged, and retrying at full speed only means
+ * finding that out thousands of times a second. Measured before this: a single
+ * dead listener produced three `listen(80) failed: errno 95` lines per
+ * millisecond, and because every attempt is an SPI transaction it took the
+ * chip's bus away from the Modbus server on the same priority -- one dead web
+ * listener stopped Modbus from answering at all. The backoff is what keeps a
+ * failure in this task local to this task.
+ */
+#define LISTEN_RETRY_MAX_MS 8000
+#define NO_LISTENER_IDLE_MS 100
+
+/*
  * Consecutive empty accepts after which a listener is rebuilt.
  *
  * This works around a state the TOE backend does not recover from on its own.
@@ -567,17 +583,45 @@ static void web_server_task(void *arg)
     ESP_LOGI(TAG, "web UI on port %u, %d listener%s", c->port, opened,
              opened == 1 ? "" : "s");
 
+    /* When a slot may next be retried, and how many times in a row it has
+     * failed. Deadlines rather than a sleep: a delay here would stall the
+     * listeners that are still healthy, and a dead slot must not cost the
+     * working ones their accepts. */
+    TickType_t next_retry[WEB_LISTENERS] = {0};
+    int        retry_fails[WEB_LISTENERS] = {0};
+
     while (!c->stop) {
+        int alive = 0;
+
         for (int i = 0; i < opened && !c->stop; i++) {
             if (listeners[i] < 0) {
-                /* Reopened below when a socket frees; accepting on -1 would
-                 * just fail immediately, every pass. */
+                /* Reopened when a socket frees; accepting on -1 would just
+                 * fail immediately, every pass. */
+                TickType_t now = xTaskGetTickCount();
+                if ((int32_t)(now - next_retry[i]) < 0) {
+                    continue;           /* not due yet */
+                }
+
                 listeners[i] = mb_transport_listen(c->ops, c->port);
                 if (listeners[i] < 0) {
+                    /* Back off 1, 2, 4, then 8 seconds. The socket is wedged
+                     * rather than busy, so the useful retry rate is "slow
+                     * enough to be free" -- and mb_transport_listen() logs the
+                     * errno itself, which at full speed is what buries every
+                     * other line in the console. */
+                    uint32_t ms = LISTEN_RETRY_MS << retry_fails[i];
+                    if (ms > LISTEN_RETRY_MAX_MS || retry_fails[i] > 16) {
+                        ms = LISTEN_RETRY_MAX_MS;
+                    } else {
+                        retry_fails[i]++;
+                    }
+                    next_retry[i] = now + pdMS_TO_TICKS(ms);
                     continue;
                 }
+                retry_fails[i] = 0;
                 ESP_LOGI(TAG, "listener %d is back", i);
             }
+            alive++;
 
             int fd = mb_transport_accept(c->ops, listeners[i],
                                          ACCEPT_TIMEOUT_MS);
@@ -592,6 +636,8 @@ static void web_server_task(void *arg)
                     listeners[i] = mb_transport_listen(c->ops, c->port);
                     if (listeners[i] < 0) {
                         ESP_LOGW(TAG, "listener %d did not come back", i);
+                        next_retry[i] = xTaskGetTickCount() +
+                                        pdMS_TO_TICKS(LISTEN_RETRY_MS);
                     }
                 }
                 continue;
@@ -608,13 +654,14 @@ static void web_server_task(void *arg)
                 ESP_LOGE(TAG, "listener %d failed; reopening", i);
                 mb_transport_close(c->ops, listeners[i]);
                 listeners[i] = -1;
-                vTaskDelay(pdMS_TO_TICKS(LISTEN_RETRY_MS));
 
-                listeners[i] = mb_transport_listen(c->ops, c->port);
-                if (listeners[i] < 0) {
-                    ESP_LOGW(TAG, "listener %d is gone; serving on %d", i,
-                             opened - 1);
-                }
+                /* Hand the slot to the retry at the top of the loop rather
+                 * than sleeping here and rebuilding inline. The sleep was a
+                 * second of nothing for the healthy listeners too, which is a
+                 * second of a page that does not load because a different
+                 * socket failed. */
+                next_retry[i] = xTaskGetTickCount() +
+                                pdMS_TO_TICKS(LISTEN_RETRY_MS);
                 continue;
             }
 
@@ -623,6 +670,13 @@ static void web_server_task(void *arg)
             /* One request per connection, so the socket goes back immediately.
              * On the TOE that is also what re-arms this listener. */
             mb_transport_close(c->ops, fd);
+        }
+
+        /* Nothing to poll: every slot is waiting on its retry deadline, and
+         * without this the loop would spin at full speed doing nothing at all.
+         * mb_transport_accept() is what yields on a healthy pass. */
+        if (alive == 0 && !c->stop) {
+            vTaskDelay(pdMS_TO_TICKS(NO_LISTENER_IDLE_MS));
         }
     }
 

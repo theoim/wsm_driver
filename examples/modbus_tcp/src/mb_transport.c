@@ -23,13 +23,33 @@ static const char *TAG = "mb_tx";
 /* No module-level vtable here on purpose -- see the header. Two servers run
  * concurrently on two stacks, so the vtable belongs to the call, not the file. */
 
-static void set_timeout(const net_sock_ops_t *ops, int fd, uint32_t ms)
+/* A response is at most one ADU, so two seconds is far longer than a healthy
+ * peer ever needs. It is short enough that a peer which stopped reading gives
+ * the task back instead of holding it until the chip's own TCP timeout. */
+#define SEND_TIMEOUT_MS  2000
+
+static void timeval_from_ms(struct timeval *tv, uint32_t ms)
 {
-    struct timeval tv = {
-        .tv_sec  = ms / 1000,
-        .tv_usec = (ms % 1000) * 1000,
-    };
+    tv->tv_sec  = ms / 1000;
+    tv->tv_usec = (ms % 1000) * 1000;
+}
+
+static void set_recv_timeout(const net_sock_ops_t *ops, int fd, uint32_t ms)
+{
+    struct timeval tv;
+    timeval_from_ms(&tv, ms);
     ops->setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+}
+
+/* Set on the accepted socket, never on the listener. On the TOE backend the
+ * two are the same descriptor, so setting it on the listener would appear to
+ * work; on the Wi-Fi path accept() returns a new socket that inherits none of
+ * the listener's options, and the deadline would silently not be there. */
+static void set_send_timeout(const net_sock_ops_t *ops, int fd, uint32_t ms)
+{
+    struct timeval tv;
+    timeval_from_ms(&tv, ms);
+    ops->setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 }
 
 int mb_transport_listen(const void *vops, uint16_t port)
@@ -70,7 +90,7 @@ int mb_transport_listen(const void *vops, uint16_t port)
 int mb_transport_accept(const void *vops, int listen_fd, uint32_t timeout_ms)
 {
     const net_sock_ops_t *ops = (const net_sock_ops_t *)vops;
-    set_timeout(ops, listen_fd, timeout_ms);
+    set_recv_timeout(ops, listen_fd, timeout_ms);
 
     struct sockaddr_in peer;
     socklen_t sl = sizeof(peer);
@@ -93,6 +113,8 @@ int mb_transport_accept(const void *vops, int listen_fd, uint32_t timeout_ms)
      * that matter, with the interface name attached. */
     ESP_LOGD(TAG, "connection from %s", inet_ntoa(peer.sin_addr));
 
+    set_send_timeout(ops, fd, SEND_TIMEOUT_MS);
+
     /* 0 is the caller's "nobody yet" value, so an accepted fd must never be 0.
      * It cannot be: lwIP descriptors start at LWIP_SOCKET_OFFSET, and the TOE
      * wrapper adds that same offset to its 0..7 hardware socket numbers. */
@@ -106,7 +128,7 @@ int mb_transport_recv_exact(const void *vops, int fd, void *buf, size_t size,
     uint8_t *p = (uint8_t *)buf;
     size_t got = 0;
 
-    set_timeout(ops, fd, timeout_ms);
+    set_recv_timeout(ops, fd, timeout_ms);
 
     while (got < size) {
         int n = ops->recv(fd, p + got, size - got, 0);
@@ -133,7 +155,7 @@ int mb_transport_recv_some(const void *vops, int fd, void *buf, size_t size,
                            uint32_t timeout_ms)
 {
     const net_sock_ops_t *ops = (const net_sock_ops_t *)vops;
-    set_timeout(ops, fd, timeout_ms);
+    set_recv_timeout(ops, fd, timeout_ms);
 
     int n = ops->recv(fd, buf, size, 0);
     if (n > 0) {

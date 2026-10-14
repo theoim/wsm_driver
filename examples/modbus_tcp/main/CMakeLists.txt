@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "../src/mb_core.c"
+        "../src/io_bind.c"
         "../src/mb_server.c"
         "../src/mb_store.c"
         "../src/mb_transport.c"
@@ -18,6 +19,7 @@ idf_component_register(
         esp_netif
         esp_event
         esp_timer
+        esp_driver_gpio
         lwip
 )
 

@@ -50,7 +50,12 @@ void mb_datastore_init(mb_datastore_t *ds)
     memset(ds, 0, sizeof(*ds));
 
     /* A pattern a master can recognise at a glance, so a wrong address or a
-     * byte-order mistake is visible without a debugger. */
+     * byte-order mistake is visible without a debugger.
+     *
+     * Elements wired to hardware are an exception, and the layer that wires
+     * them owns it: this file cannot know that coil[0] is a relay rather than a
+     * number, so it seeds the pattern and io_bind.c overrides what it has
+     * bound, before any master can connect. */
     for (int i = 0; i < MB_REG_COUNT; i++) {
         ds->holding[i] = (uint16_t)(1000 + i);   /* 1000, 1001, 1002, ... */
         ds->input[i]   = (uint16_t)(i * i);      /* 0, 1, 4, 9, 16, ...   */
