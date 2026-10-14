@@ -47,8 +47,20 @@
             "path": "examples/http"
         },
         {
+            "name": "example: websocket",
+            "path": "examples/websocket"
+        },
+        {
+            "name": "example: camera_stream",
+            "path": "examples/camera_stream"
+        },
+        {
             "name": "example: mqtt",
             "path": "examples/mqtt"
+        },
+        {
+            "name": "example: modbus_tcp",
+            "path": "examples/modbus_tcp"
         },
         {
             "name": "example: netbios",

@@ -22,3 +22,7 @@
 **/build_result.log
 **/build_exit.txt
 *.log
+
+# Local development notes: working state, decisions in progress and
+# customer-facing detail that does not belong in a public repository.
+DEVLOG_*.md
